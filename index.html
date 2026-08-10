@@ -49,7 +49,9 @@
     <script>
         const SUPABASE_URL = 'https://fqrfknyludtvqaaajjoc.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_fkC9WhreuFmhmbVRCw6Isw_rftuBACx';
-        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        // Inicialização correta usando o namespace global da biblioteca v2
+        const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         let etapa = 1; 
         let nrAtual = '';
@@ -72,10 +74,11 @@
         });
 
         async function testarConexao() {
-            const { data, error } = await supabase.from('conferencia').select('id').limit(1);
+            const { data, error } = await db.from('conferencia').select('id').limit(1);
             if (error) {
                 connectionStatus.textContent = "Erro na conexão com Supabase";
                 connectionStatus.className = "text-red-400";
+                console.error("Erro Supabase:", error);
             } else {
                 connectionStatus.textContent = "Conectado ao Supabase";
                 connectionStatus.className = "text-green-400";
@@ -145,7 +148,7 @@
             const volumeLido = volume.trim();
 
             // 1. Tenta achar o par exato (NR + volume_clie) ignorando espaços
-            const { data: exato, error: errExato } = await supabase
+            const { data: exato, error: errExato } = await db
                 .from('conferencia')
                 .select('*')
                 .eq('nr', nrLimpa)
@@ -158,7 +161,7 @@
             }
 
             // 2. Se deu erro, busca se o volume pertence a OUTRA NR
-            const { data: porVolume, error: errVol } = await supabase
+            const { data: porVolume, error: errVol } = await db
                 .from('conferencia')
                 .select('*')
                 .eq('volume_clie', volumeLido)
