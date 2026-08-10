@@ -49,6 +49,8 @@
     <script>
         const SUPABASE_URL = 'https://fqrfknyludtvqaaajjoc.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_fkC9WhreuFmhmbVRCw6Isw_rftuBACx';
+        
+        // Inicialização corrigida utilizando o namespace global do CDN
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         let etapa = 1; 
@@ -144,19 +146,7 @@
             const nrLimpa = nr.trim();
             const volumeLido = volume.trim();
 
-            // Busca inteligente por correspondência parcial (pega a maior parte coincidente nos dois sentidos)
-            // 1. Tenta achar o registro exato ou onde o volume do banco está contido no código lido
-            const { data: exato, error: errExato } = await supabase
-                .from('conferencia')
-                .select('*')
-                .eq('nr', nrLimpa)
-                .or(`volume_clie.eq.${volumeLido},${volumeLido}.ilike.%volume_clie%`);
-
-            // Como o operador ilike dinâmico com coluna à esquerda varia, vamos buscar todos os registros desta NR ou fazer a query otimizada:
-            // Vamos buscar os registros da NR informada e comparar via JavaScript a maior parte coincidente se necessário, 
-            // ou usar o filtro do Supabase buscando por trechos equivalentes.
-            
-            // Abordagem mais robusta para encontrar a maior parte coincidente independentemente do tamanho:
+            // 1. Busca os registros da NR informada para validar a maior parte coincidente
             const { data: listaCandidatos, error: errCand } = await supabase
                 .from('conferencia')
                 .select('*')
@@ -166,6 +156,7 @@
             if (listaCandidatos) {
                 registroEncontrado = listaCandidatos.find(item => {
                     const volBanco = (item.volume_clie || '').trim();
+                    if (!volBanco) return false;
                     return volumeLido.includes(volBanco) || volBanco.includes(volumeLido);
                 });
             }
