@@ -141,32 +141,32 @@
         });
 
         async function validarNoSupabase(nr, volume) {
-            // 1. Tenta achar o par exato (NR + Volume)
+            const nrLimpa = nr.trim();
+            const volumeLido = volume.trim();
+
+            // 1. Tenta achar o par exato (NR + volume_clie) ignorando espaços
             const { data: exato, error: errExato } = await supabase
                 .from('conferencia')
                 .select('*')
-                .eq('nr', nr)
-                .eq('volume', volume)
+                .eq('nr', nrLimpa)
+                .eq('volume_clie', volumeLido)
                 .maybeSingle();
 
             if (exato) {
-                // Sucesso absoluto
                 setFeedbackVisual(true, "CONFERIDO COM SUCESSO", null);
                 return;
             }
 
-            // 2. Se deu erro, vamos investigar se o volume pertence a OUTRA NR (Inversão de etiqueta)
+            // 2. Se deu erro, busca se o volume pertence a OUTRA NR
             const { data: porVolume, error: errVol } = await supabase
                 .from('conferencia')
                 .select('*')
-                .eq('volume', volume)
+                .eq('volume_clie', volumeLido)
                 .maybeSingle();
 
             if (porVolume) {
-                // Achamos o volume, mas ele pertence a outra NR!
-                setFeedbackVisual(false, "ERRO: ETIQUETA INVERTIDA!", `Este volume pertence à NR: ${porVolume.nr} | NF: ${porVolume.nf || 'Não informada'}`);
+                setFeedbackVisual(false, "ERRO: ETIQUETA INVERTIDA!", `Este volume pertence à NR: ${porVolume.nr.trim()} | NF: ${porVolume.nf || 'Não informada'}`);
             } else {
-                // Nem o volume existe na base
                 setFeedbackVisual(false, "DIVERGÊNCIA ENCONTRADA", "Volume não encontrado na base de dados.");
             }
         }
@@ -193,7 +193,6 @@
                 tocarSom('erro');
             }
 
-            // O tempo de exibição do erro é um pouco maior (4 segundos) para o conferente conseguir ler a divergência com calma
             const tempoEspera = sucesso ? 2500 : 4500;
 
             setTimeout(() => {
