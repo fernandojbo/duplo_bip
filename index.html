@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Conferência por Duplo Bip - FreteOnX</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Importação otimizada via esm.sh para GitHub Pages -->
     <script type="module">
         import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
         window.createSupabaseClient = createClient;
@@ -167,6 +166,7 @@
             }
         });
 
+        // Validação: Verifica se o volume lido (maior) começa ou contém o valor menor gravado no banco
         function volumeBateComBanco(volLido, volBanco) {
             if (!volLido || !volBanco) return false;
             const lido = volLido.trim();
@@ -192,7 +192,6 @@
             const volumeLido = volume.trim();
 
             try {
-                // Busca a lista geral de registros para filtrar com segurança no Javascript (evita crash de tipo de dado no SQL)
                 const { data: todosRegistros, error } = await supabaseClient
                     .from('conferencia')
                     .select('*');
@@ -204,7 +203,7 @@
                     return;
                 }
 
-                // Filtra registros que pertencem à NR lida (comparando convertendo para string para evitar conflito numérico/texto)
+                // 1. Filtra registros pertencentes exatamente à NR lida
                 const registrosDaNr = todosRegistros.filter(item => String(item.nr).trim() === nrLimpa);
 
                 let achouNaMesmaNr = false;
@@ -217,7 +216,7 @@
                     return;
                 }
 
-                // Se não achou na mesma NR, verifica se pertence a outra (inversão)
+                // 2. Se não achou na mesma NR, verifica se pertence a outra (alerta de inversão)
                 const registroOutraNr = todosRegistros.find(item => volumeBateComBanco(volumeLido, item.volume_clie));
 
                 if (registroOutraNr) {
