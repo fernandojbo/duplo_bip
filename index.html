@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conferência por Duplo Bip - FreteOnX</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body id="app-bg" class="bg-slate-900 text-white h-screen flex flex-col justify-between transition-colors duration-300">
+
+    <!-- Cabeçalho -->
+    <header class="p-4 bg-slate-800 shadow-md text-center">
+        <h1 class="text-xl font-bold">Conferência de Carga</h1>
+        <p class="text-xs text-slate-400">Sistema de Duplo Bip (NR + Volume)</p>
+    </header>
+
+    <!-- Área Principal / Display -->
+    <main class="flex-1 flex flex-col items-center justify-center p-6 text-center">
+        <div id="status-box" class="w-full max-w-md p-8 rounded-2xl bg-slate-800 shadow-2xl border border-slate-700 transition-all">
+            <h2 id="instruction-title" class="text-lg font-semibold text-slate-300 mb-2">Aguardando Leitura...</h2>
+            <p id="instruction-sub" class="text-sm text-slate-400 mb-6">Bipe a etiqueta <strong>NR</strong></p>
+            
+            <div class="space-y-3 text-left">
+                <div>
+                    <label class="text-xs text-slate-400 block">NR Lida:</label>
+                    <span id="display-nr" class="text-xl font-mono font-bold text-amber-400">-</span>
+                </div>
+                <div>
+                    <label class="text-xs text-slate-400 block">Volume Lido:</label>
+                    <span id="display-volume" class="text-xl font-mono font-bold text-amber-400">-</span>
+                </div>
+                <!-- Alerta extra para mostrar a NF invertida/correta em caso de erro -->
+                <div id="error-details" class="hidden mt-4 p-3 bg-red-900/50 border border-red-500 rounded-lg">
+                    <span class="text-xs text-red-300 block font-bold">⚠️ ATENÇÃO - INVERSÃO DETECTADA:</span>
+                    <span id="display-info-extra" class="text-sm font-mono text-white">-</span>
+                </div>
+            </div>
+        </div>
+
+        <input type="text" id="barcode-input" class="opacity-0 absolute -top-10" autofocus autocomplete="off">
+    </main>
+
+    <!-- Rodapé com Status -->
+    <footer class="p-3 bg-slate-800 text-center text-xs text-slate-400">
+        Status: <span id="connection-status" class="text-yellow-400">Conectando ao Supabase...</span>
+    </footer>
+
+    <script>
+        const SUPABASE_URL = 'https://fqrfknyludtvqaaajjoc.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_fkC9WhreuFmhmbVRCw6Isw_rftuBACx';
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        let etapa = 1; 
+        let nrAtual = '';
+        
+        const inputField = document.getElementById('barcode-input');
+        const appBg = document.getElementById('app-bg');
+        const statusBox = document.getElementById('status-box');
+        const instructionTitle = document.getElementById('instruction-title');
+        const instructionSub = document.getElementById('instruction-sub');
+        const displayNr = document.getElementById('display-nr');
+        const displayVolume = document.getElementById('display-volume');
+        const connectionStatus = document.getElementById('connection-status');
+        const errorDetails = document.getElementById('error-details');
+        const displayInfoExtra = document.getElementById('display-info-extra');
+
+        document.addEventListener('click', () => inputField.focus());
+        window.addEventListener('load', () => {
+            inputField.focus();
+            testarConexao();
+        });
+
+        async function testarConexao() {
+            const { data, error } = await supabase.from('conferencia').select('id').limit(1);
+            if (error) {
+                connectionStatus.textContent = "Erro na conexão com Supabase";
+                connectionStatus.className = "text-red-400";
+            } else {
+                connectionStatus.textContent = "Conectado ao Supabase";
+                connectionStatus.className = "text-green-400";
+            }
+        }
+
+        function tocarSom(tipo) {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            if (tipo === 'sucesso') {
+                osc.frequency.setValueAtTime(880, audioCtx.currentTime); 
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.15);
+            } else if (tipo === 'erro') {
+                osc.frequency.setValueAtTime(200, audioCtx.currentTime); 
+                gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.4);
+            } else {
+                osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.1);
+            }
+        }
+
+        inputField.addEventListener('keydown', async function(e) {
+            if (e.key === 'Enter') {
+                const codigoLido = inputField.value.trim();
+                inputField.value = ''; 
+
+                if (!codigoLido) return;
+
+                if (etapa === 1) {
+                    nrAtual = codigoLido;
+                    displayNr.textContent = nrAtual;
+                    displayVolume.textContent = '-';
+                    errorDetails.classList.add('hidden');
+                    
+                    etapa = 2;
+                    instructionTitle.textContent = "Aguardando Volume...";
+                    instructionSub.innerHTML = "Bipe a etiqueta de <strong>Volume</strong>";
+                    appBg.className = "bg-slate-900 text-white h-screen flex flex-col justify-between transition-colors duration-300";
+                    statusBox.className = "w-full max-w-md p-8 rounded-2xl bg-slate-800 shadow-2xl border border-slate-700 transition-all";
+                    tocarSom('neutro');
+
+                } else if (etapa === 2) {
+                    const volumeLido = codigoLido;
+                    displayVolume.textContent = volumeLido;
+
+                    await validarNoSupabase(nrAtual, volumeLido);
+
+                    etapa = 1;
+                    nrAtual = '';
+                }
+            }
+        });
+
+        async function validarNoSupabase(nr, volume) {
+            // 1. Tenta achar o par exato (NR + Volume)
+            const { data: exato, error: errExato } = await supabase
+                .from('conferencia')
+                .select('*')
+                .eq('nr', nr)
+                .eq('volume', volume)
+                .maybeSingle();
+
+            if (exato) {
+                // Sucesso absoluto
+                setFeedbackVisual(true, "CONFERIDO COM SUCESSO", null);
+                return;
+            }
+
+            // 2. Se deu erro, vamos investigar se o volume pertence a OUTRA NR (Inversão de etiqueta)
+            const { data: porVolume, error: errVol } = await supabase
+                .from('conferencia')
+                .select('*')
+                .eq('volume', volume)
+                .maybeSingle();
+
+            if (porVolume) {
+                // Achamos o volume, mas ele pertence a outra NR!
+                setFeedbackVisual(false, "ERRO: ETIQUETA INVERTIDA!", `Este volume pertence à NR: ${porVolume.nr} | NF: ${porVolume.nf || 'Não informada'}`);
+            } else {
+                // Nem o volume existe na base
+                setFeedbackVisual(false, "DIVERGÊNCIA ENCONTRADA", "Volume não encontrado na base de dados.");
+            }
+        }
+
+        function setFeedbackVisual(sucesso, mensagem, detalheExtra) {
+            instructionTitle.textContent = mensagem;
+            
+            if (sucesso) {
+                appBg.className = "bg-green-600 text-white h-screen flex flex-col justify-between transition-colors duration-300";
+                statusBox.className = "w-full max-w-md p-8 rounded-2xl bg-green-700 shadow-2xl border border-green-500 transition-all";
+                errorDetails.classList.add('hidden');
+                tocarSom('sucesso');
+            } else {
+                appBg.className = "bg-red-600 text-white h-screen flex flex-col justify-between transition-colors duration-300";
+                statusBox.className = "w-full max-w-md p-8 rounded-2xl bg-red-700 shadow-2xl border border-red-500 transition-all";
+                
+                if (detalheExtra) {
+                    displayInfoExtra.textContent = detalheExtra;
+                    errorDetails.classList.remove('hidden');
+                } else {
+                    errorDetails.classList.add('hidden');
+                }
+                
+                tocarSom('erro');
+            }
+
+            // O tempo de exibição do erro é um pouco maior (4 segundos) para o conferente conseguir ler a divergência com calma
+            const tempoEspera = sucesso ? 2500 : 4500;
+
+            setTimeout(() => {
+                appBg.className = "bg-slate-900 text-white h-screen flex flex-col justify-between transition-colors duration-300";
+                statusBox.className = "w-full max-w-md p-8 rounded-2xl bg-slate-800 shadow-2xl border border-slate-700 transition-all";
+                instructionTitle.textContent = "Aguardando Leitura...";
+                instructionSub.innerHTML = "Bipe a etiqueta <strong>NR</strong>";
+                displayNr.textContent = "-";
+                displayVolume.textContent = "-";
+                errorDetails.classList.add('hidden');
+            }, tempoEspera);
+        }
+    </script>
+</body>
+</html>
