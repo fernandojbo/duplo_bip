@@ -49,7 +49,8 @@
     <script>
         const SUPABASE_URL = 'https://fqrfknyludtvqaaajjoc.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_fkC9WhreuFmhmbVRCw6Isw_rftuBACx';
-        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        let supabase = null;
 
         let etapa = 1; 
         let nrAtual = '';
@@ -66,12 +67,20 @@
         const displayInfoExtra = document.getElementById('display-info-extra');
 
         document.addEventListener('click', () => inputField.focus());
+        
         window.addEventListener('load', () => {
             inputField.focus();
-            testarConexao();
+            if (window.supabase && window.supabase.createClient) {
+                supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                testarConexao();
+            } else {
+                connectionStatus.textContent = "Erro ao carregar o script do Supabase";
+                connectionStatus.className = "text-red-400";
+            }
         });
 
         async function testarConexao() {
+            if (!supabase) return;
             const { data, error } = await supabase.from('conferencia').select('id').limit(1);
             if (error) {
                 connectionStatus.textContent = "Erro na conexão com Supabase";
@@ -141,6 +150,7 @@
         });
 
         async function validarNoSupabase(nr, volume) {
+            if (!supabase) return;
             const nrLimpa = nr.trim();
             const volumeLido = volume.trim();
 
