@@ -49,9 +49,7 @@
     <script>
         const SUPABASE_URL = 'https://fqrfknyludtvqaaajjoc.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_fkC9WhreuFmhmbVRCw6Isw_rftuBACx';
-        
-        // Inicialização corrigida utilizando o namespace global do CDN
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         let etapa = 1; 
         let nrAtual = '';
@@ -146,7 +144,6 @@
             const nrLimpa = nr.trim();
             const volumeLido = volume.trim();
 
-            // 1. Busca os registros da NR informada para validar a maior parte coincidente
             const { data: listaCandidatos, error: errCand } = await supabase
                 .from('conferencia')
                 .select('*')
@@ -166,7 +163,6 @@
                 return;
             }
 
-            // 2. Se não achou na mesma NR, verifica se pertence a OUTRA NR na base inteira
             const { data: todosRegistros, error: errTodos } = await supabase
                 .from('conferencia')
                 .select('*');
