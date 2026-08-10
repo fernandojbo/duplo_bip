@@ -49,7 +49,7 @@
     <script>
         const SUPABASE_URL = 'https://fqrfknyludtvqaaajjoc.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_fkC9WhreuFmhmbVRCw6Isw_rftuBACx';
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         let etapa = 1; 
         let nrAtual = '';
@@ -140,18 +140,16 @@
             }
         });
 
-        async function validarNoSupabase(nr, volumeBruto) {
+        async function validarNoSupabase(nr, volume) {
             const nrLimpa = nr.trim();
-            const volumeLido = volumeBruto.trim();
-            // Pega a base do código para cruzar com o dado armazenado no banco
-            const volumeBusca = volumeLido.length > 20 ? volumeLido.substring(0, 20) : volumeLido;
+            const volumeLido = volume.trim();
 
-            // 1. Tenta achar o par exato ou por correspondência parcial com o início do código
+            // 1. Tenta achar o par exato (NR + volume_clie) ignorando espaços
             const { data: exato, error: errExato } = await supabase
                 .from('conferencia')
                 .select('*')
                 .eq('nr', nrLimpa)
-                .ilike('volume_clie', `${volumeBusca}%`)
+                .eq('volume_clie', volumeLido)
                 .maybeSingle();
 
             if (exato) {
@@ -159,11 +157,11 @@
                 return;
             }
 
-            // 2. Se deu erro, busca se essa parte do volume pertence a OUTRA NR
+            // 2. Se deu erro, busca se o volume pertence a OUTRA NR
             const { data: porVolume, error: errVol } = await supabase
                 .from('conferencia')
                 .select('*')
-                .ilike('volume_clie', `${volumeBusca}%`)
+                .eq('volume_clie', volumeLido)
                 .maybeSingle();
 
             if (porVolume) {
