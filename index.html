@@ -131,9 +131,7 @@
                 }
                 osc.start();
                 osc.stop(audioCtx.currentTime + 0.15);
-            } catch (e) {
-                // Ignora restrição de autoplay
-            }
+            } catch (e) {}
         }
 
         inputField.addEventListener('keydown', async function(e) {
@@ -166,17 +164,14 @@
             }
         });
 
-        // Validação: Verifica se o volume lido (maior) começa ou contém o valor menor gravado no banco
+        // Validação universal: Verifica se o código do banco está contido no volume lido, ou vice-versa
         function volumeBateComBanco(volLido, volBanco) {
             if (!volLido || !volBanco) return false;
             const lido = volLido.trim();
             const banco = volBanco.trim();
 
-            if (lido === banco) return true;
-            if (lido.startsWith(banco)) return true; 
-            if (lido.includes(banco)) return true;
-
-            return false;
+            // Se forem idênticos, ou se o lido é maior e contém o do banco, ou se o do banco contém o lido
+            return lido === banco || lido.includes(banco) || banco.includes(lido);
         }
 
         async function validarNoSupabase(nr, volume) {
@@ -203,7 +198,7 @@
                     return;
                 }
 
-                // 1. Filtra registros pertencentes exatamente à NR lida
+                // 1. Filtra registros pertencentes exatamente à NR lida na mesma linha
                 const registrosDaNr = todosRegistros.filter(item => String(item.nr).trim() === nrLimpa);
 
                 let achouNaMesmaNr = false;
