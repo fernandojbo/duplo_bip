@@ -167,14 +167,12 @@
             }
         });
 
-        // Função para conferir se o volume lido corresponde ao do banco (tratando tamanhos diferentes)
         function volumeBateComBanco(volLido, volBanco) {
             if (!volLido || !volBanco) return false;
             const lido = volLido.trim();
             const banco = volBanco.trim();
 
             if (lido === banco) return true;
-            // Como o lido é maior e contém o do banco, verifica se começa com o código cadastrado
             if (lido.startsWith(banco)) return true; 
             if (lido.includes(banco)) return true;
 
@@ -193,42 +191,44 @@
             const nrLimpa = nr.trim();
             const volumeLido = volume.trim();
 
-            // 1. Busca APENAS os registros da mesma linha onde o NR confere exatamente
-            const { data: registrosDaNr, error } = await supabaseClient
-                .from('conferencia')
-                .select('*')
-                .eq('nr', nrLimpa);
+            try {
+                // Busca a lista geral de registros para filtrar com segurança no Javascript (evita crash de tipo de dado no SQL)
+                const { data: todosRegistros, error } = await supabaseClient
+                    .from('conferencia')
+                    .select('*');
 
-            if (error) {
+                if (error) throw error;
+
+                if (!todosRegistros || todosRegistros.length === 0) {
+                    setFeedbackVisual(false, "BASE VAZIA", "Nenhum registro encontrado na tabela.");
+                    return;
+                }
+
+                // Filtra registros que pertencem à NR lida (comparando convertendo para string para evitar conflito numérico/texto)
+                const registrosDaNr = todosRegistros.filter(item => String(item.nr).trim() === nrLimpa);
+
+                let achouNaMesmaNr = false;
+                if (registrosDaNr.length > 0) {
+                    achouNaMesmaNr = registrosDaNr.some(item => volumeBateComBanco(volumeLido, item.volume_clie));
+                }
+
+                if (achouNaMesmaNr) {
+                    setFeedbackVisual(true, "CONFERIDO COM SUCESSO", null);
+                    return;
+                }
+
+                // Se não achou na mesma NR, verifica se pertence a outra (inversão)
+                const registroOutraNr = todosRegistros.find(item => volumeBateComBanco(volumeLido, item.volume_clie));
+
+                if (registroOutraNr) {
+                    setFeedbackVisual(false, "ERRO: ETIQUETA INVERTIDA!", `Este volume pertence à NR: ${String(registroOutraNr.nr).trim()} | NF: ${registroOutraNr.nf || 'Não informada'}`);
+                } else {
+                    setFeedbackVisual(false, "DIVERGÊNCIA ENCONTRADA", "Volume não confere com esta NR na base de dados.");
+                }
+
+            } catch (err) {
+                console.error("Erro na consulta:", err);
                 setFeedbackVisual(false, "ERRO DE CONSULTA", "Falha ao buscar dados no Supabase.");
-                return;
-            }
-
-            // Verifica se encontrou registros para essa NR e se o volume bate na mesma linha
-            let achouNaMesmaNr = false;
-            if (registrosDaNr && registrosDaNr.length > 0) {
-                achouNaMesmaNr = registrosDaNr.some(item => volumeBateComBanco(volumeLido, item.volume_clie));
-            }
-
-            if (achouNaMesmaNr) {
-                setFeedbackVisual(true, "CONFERIDO COM SUCESSO", null);
-                return;
-            }
-
-            // 2. Se não bateu na mesma NR, verifica se esse volume pertence a OUTRA NR (para detectar inversão)
-            const { data: todosRegistros } = await supabaseClient
-                .from('conferencia')
-                .select('*');
-
-            let registroOutraNr = null;
-            if (todosRegistros) {
-                registroOutraNr = todosRegistros.find(item => volumeBateComBanco(volumeLido, item.volume_clie));
-            }
-
-            if (registroOutraNr) {
-                setFeedbackVisual(false, "ERRO: ETIQUETA INVERTIDA!", `Este volume pertence à NR: ${registroOutraNr.nr.trim()} | NF: ${registroOutraNr.nf || 'Não informada'}`);
-            } else {
-                setFeedbackVisual(false, "DIVERGÊNCIA ENCONTRADA", "Volume não confere com esta NR na base de dados.");
             }
         }
 
