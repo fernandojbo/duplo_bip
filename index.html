@@ -85,7 +85,6 @@
 
         window.addEventListener('load', () => {
             inputField.focus();
-            // Fallback caso o evento de módulo já tenha disparado
             if (window.createSupabaseClient && !supabaseClient) {
                 supabaseClient = window.createSupabaseClient(SUPABASE_URL, SUPABASE_ANON_KEY);
                 testarConexao();
@@ -125,7 +124,7 @@
                 osc.start();
                 osc.stop(audioCtx.currentTime + 0.15);
             } catch (e) {
-                // Ignora bloqueio de autoplay do navegador
+                // Ignora bloqueio de autoplay
             }
         }
 
@@ -159,6 +158,24 @@
             }
         });
 
+        // Função inteligente para verificar correspondência parcial robusta
+        function volumes coincidem(volLido, volBanco) {
+            if (!volLido || !volBanco) return false;
+            const lido = volLido.trim();
+            const banco = volBanco.trim();
+
+            // 1. Se um contém o outro exatamente
+            if (lido.includes(banco) || banco.includes(lido)) return true;
+
+            // 2. Se a leitura for maior, valida se ela começa exatamente com o código cadastrado no banco (núcleo principal)
+            if (lido.startsWith(banco)) return true;
+
+            // 3. Validação por sub-trecho significativo (caso o banco tenha parte central do código lido)
+            if (banco.length >= 8 && lido.includes(banco)) return true;
+
+            return false;
+        }
+
         async function validarNoSupabase(nr, volume) {
             if (!supabaseClient) {
                 setFeedbackVisual(false, "ERRO", "Supabase não conectado.");
@@ -168,6 +185,7 @@
             const nrLimpa = nr.trim();
             const volumeLido = volume.trim();
 
+            // Busca os registros referentes à NR informada
             const { data: listaCandidatos } = await supabaseClient
                 .from('conferencia')
                 .select('*')
@@ -175,11 +193,7 @@
 
             let registroEncontrado = null;
             if (listaCandidatos) {
-                registroEncontrado = listaCandidatos.find(item => {
-                    const volBanco = (item.volume_clie || '').trim();
-                    if (!volBanco) return false;
-                    return volumeLido.includes(volBanco) || volBanco.includes(volumeLido);
-                });
+                registroEncontrado = listaCandidatos.find(item => volumesCoincidem(volumeLido, item.volume_clie));
             }
 
             if (registroEncontrado) {
@@ -187,17 +201,14 @@
                 return;
             }
 
+            // Se não achou na NR certa, varre a base para identificar se pertence a outra NR (etiqueta invertida)
             const { data: todosRegistros } = await supabaseClient
                 .from('conferencia')
                 .select('*');
 
             let registroOutraNr = null;
             if (todosRegistros) {
-                registroOutraNr = todosRegistros.find(item => {
-                    const volBanco = (item.volume_clie || '').trim();
-                    if (!volBanco) return false;
-                    return volumeLido.includes(volBanco) || volBanco.includes(volumeLido);
-                });
+                registroOutraNr = todosRegistros.find(item => volumesCoincidem(volumeLido, item.volume_clie));
             }
 
             if (registroOutraNr) {
