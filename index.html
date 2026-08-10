@@ -49,9 +49,7 @@
     <script>
         const SUPABASE_URL = 'https://fqrfknyludtvqaaajjoc.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_fkC9WhreuFmhmbVRCw6Isw_rftuBACx';
-        
-        // Inicialização correta usando o namespace global da biblioteca v2
-        const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         let etapa = 1; 
         let nrAtual = '';
@@ -74,11 +72,10 @@
         });
 
         async function testarConexao() {
-            const { data, error } = await db.from('conferencia').select('id').limit(1);
+            const { data, error } = await supabase.from('conferencia').select('id').limit(1);
             if (error) {
                 connectionStatus.textContent = "Erro na conexão com Supabase";
                 connectionStatus.className = "text-red-400";
-                console.error("Erro Supabase:", error);
             } else {
                 connectionStatus.textContent = "Conectado ao Supabase";
                 connectionStatus.className = "text-green-400";
@@ -143,16 +140,18 @@
             }
         });
 
-        async function validarNoSupabase(nr, volume) {
+        async function validarNoSupabase(nr, volumeBruto) {
             const nrLimpa = nr.trim();
-            const volumeLido = volume.trim();
+            const volumeLido = volumeBruto.trim();
+            // Pega os primeiros 20 caracteres para garantir correspondência com a maior parte do código base
+            const volumeBusca = volumeLido.length > 20 ? volumeLido.substring(0, 20) : volumeLido;
 
-            // 1. Tenta achar o par exato (NR + volume_clie) ignorando espaços
-            const { data: exato, error: errExato } = await db
+            // 1. Tenta achar o par exato ou por correspondência parcial (começo do código)
+            const { data: exato, error: errExato } = await supabase
                 .from('conferencia')
                 .select('*')
                 .eq('nr', nrLimpa)
-                .eq('volume_clie', volumeLido)
+                .ilike('volume_clie', `${volumeBusca}%`)
                 .maybeSingle();
 
             if (exato) {
@@ -160,11 +159,11 @@
                 return;
             }
 
-            // 2. Se deu erro, busca se o volume pertence a OUTRA NR
-            const { data: porVolume, error: errVol } = await db
+            // 2. Se deu erro, busca se essa parte do volume pertence a OUTRA NR na base
+            const { data: porVolume, error: errVol } = await supabase
                 .from('conferencia')
                 .select('*')
-                .eq('volume_clie', volumeLido)
+                .ilike('volume_clie', `${volumeBusca}%`)
                 .maybeSingle();
 
             if (porVolume) {
