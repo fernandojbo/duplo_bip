@@ -167,22 +167,22 @@
             }
         });
 
-        // Validação inteligente para etiquetas maiores que contêm o código do banco
-        function volumesCoincidem(volLido, volBanco) {
+        // Função para conferir se o volume lido corresponde ao do banco (tratando tamanhos diferentes)
+        function volumeBateComBanco(volLido, volBanco) {
             if (!volLido || !volBanco) return false;
             const lido = volLido.trim();
             const banco = volBanco.trim();
 
             if (lido === banco) return true;
-            if (lido.startsWith(banco)) return true; // Trata quando a leitura tem sufixos no final
-            if (lido.includes(banco) || banco.includes(lido)) return true;
+            // Como o lido é maior e contém o do banco, verifica se começa com o código cadastrado
+            if (lido.startsWith(banco)) return true; 
+            if (lido.includes(banco)) return true;
 
             return false;
         }
 
         async function validarNoSupabase(nr, volume) {
             if (!supabaseClient) {
-                // Tenta reinicializar caso tenha falhado no carregamento inicial
                 inicializarSupabase();
                 if (!supabaseClient) {
                     setFeedbackVisual(false, "ERRO", "Supabase não conectado.");
@@ -193,34 +193,42 @@
             const nrLimpa = nr.trim();
             const volumeLido = volume.trim();
 
-            const { data: listaCandidatos } = await supabaseClient
+            // 1. Busca APENAS os registros da mesma linha onde o NR confere exatamente
+            const { data: registrosDaNr, error } = await supabaseClient
                 .from('conferencia')
                 .select('*')
                 .eq('nr', nrLimpa);
 
-            let registroEncontrado = null;
-            if (listaCandidatos) {
-                registroEncontrado = listaCandidatos.find(item => volumesCoincidem(volumeLido, item.volume_clie));
+            if (error) {
+                setFeedbackVisual(false, "ERRO DE CONSULTA", "Falha ao buscar dados no Supabase.");
+                return;
             }
 
-            if (registroEncontrado) {
+            // Verifica se encontrou registros para essa NR e se o volume bate na mesma linha
+            let achouNaMesmaNr = false;
+            if (registrosDaNr && registrosDaNr.length > 0) {
+                achouNaMesmaNr = registrosDaNr.some(item => volumeBateComBanco(volumeLido, item.volume_clie));
+            }
+
+            if (achouNaMesmaNr) {
                 setFeedbackVisual(true, "CONFERIDO COM SUCESSO", null);
                 return;
             }
 
+            // 2. Se não bateu na mesma NR, verifica se esse volume pertence a OUTRA NR (para detectar inversão)
             const { data: todosRegistros } = await supabaseClient
                 .from('conferencia')
                 .select('*');
 
             let registroOutraNr = null;
             if (todosRegistros) {
-                registroOutraNr = todosRegistros.find(item => volumesCoincidem(volumeLido, item.volume_clie));
+                registroOutraNr = todosRegistros.find(item => volumeBateComBanco(volumeLido, item.volume_clie));
             }
 
             if (registroOutraNr) {
                 setFeedbackVisual(false, "ERRO: ETIQUETA INVERTIDA!", `Este volume pertence à NR: ${registroOutraNr.nr.trim()} | NF: ${registroOutraNr.nf || 'Não informada'}`);
             } else {
-                setFeedbackVisual(false, "DIVERGÊNCIA ENCONTRADA", "Volume não encontrado na base de dados.");
+                setFeedbackVisual(false, "DIVERGÊNCIA ENCONTRADA", "Volume não confere com esta NR na base de dados.");
             }
         }
 
