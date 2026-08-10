@@ -49,8 +49,7 @@
     <script>
         const SUPABASE_URL = 'https://fqrfknyludtvqaaajjoc.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_fkC9WhreuFmhmbVRCw6Isw_rftuBACx';
-        
-        let supabase = null;
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         let etapa = 1; 
         let nrAtual = '';
@@ -67,22 +66,12 @@
         const displayInfoExtra = document.getElementById('display-info-extra');
 
         document.addEventListener('click', () => inputField.focus());
-        
         window.addEventListener('load', () => {
             inputField.focus();
-            
-            // Garante que o SDK carregou antes de instanciar
-            if (window.supabase && window.supabase.createClient) {
-                supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-                testarConexao();
-            } else {
-                connectionStatus.textContent = "Erro ao carregar biblioteca do Supabase";
-                connectionStatus.className = "text-red-400";
-            }
+            testarConexao();
         });
 
         async function testarConexao() {
-            if (!supabase) return;
             const { data, error } = await supabase.from('conferencia').select('id').limit(1);
             if (error) {
                 connectionStatus.textContent = "Erro na conexão com Supabase";
@@ -152,12 +141,12 @@
         });
 
         async function validarNoSupabase(nr, volumeBruto) {
-            if (!supabase) return;
             const nrLimpa = nr.trim();
             const volumeLido = volumeBruto.trim();
+            // Pega a base do código para cruzar com o dado armazenado no banco
             const volumeBusca = volumeLido.length > 20 ? volumeLido.substring(0, 20) : volumeLido;
 
-            // 1. Tenta achar o par exato ou por correspondência parcial (começo do código)
+            // 1. Tenta achar o par exato ou por correspondência parcial com o início do código
             const { data: exato, error: errExato } = await supabase
                 .from('conferencia')
                 .select('*')
@@ -170,7 +159,7 @@
                 return;
             }
 
-            // 2. Se deu erro, busca se essa parte do volume pertence a OUTRA NR na base
+            // 2. Se deu erro, busca se essa parte do volume pertence a OUTRA NR
             const { data: porVolume, error: errVol } = await supabase
                 .from('conferencia')
                 .select('*')
