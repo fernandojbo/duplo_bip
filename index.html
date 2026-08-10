@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Conferência por Duplo Bip - FreteOnX</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Importação otimizada via esm.sh ideal para GitHub Pages -->
+    <!-- Importação otimizada via esm.sh para GitHub Pages -->
     <script type="module">
         import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
         window.createSupabaseClient = createClient;
@@ -55,7 +55,6 @@
         const SUPABASE_ANON_KEY = 'sb_publishable_fkC9WhreuFmhmbVRCw6Isw_rftuBACx';
         
         let supabaseClient = null;
-
         let etapa = 1; 
         let nrAtual = '';
         
@@ -73,33 +72,43 @@
         document.addEventListener('click', () => inputField.focus());
         
         window.addEventListener('supabase-ready', () => {
-            try {
-                supabaseClient = window.createSupabaseClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-                testarConexao();
-            } catch (err) {
-                console.error("Erro ao iniciar cliente:", err);
-                connectionStatus.textContent = "Erro ao iniciar Supabase";
-                connectionStatus.className = "text-red-400";
-            }
+            inicializarSupabase();
         });
 
         window.addEventListener('load', () => {
             inputField.focus();
             if (window.createSupabaseClient && !supabaseClient) {
-                supabaseClient = window.createSupabaseClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-                testarConexao();
+                inicializarSupabase();
             }
         });
 
+        function inicializarSupabase() {
+            try {
+                if (!supabaseClient && window.createSupabaseClient) {
+                    supabaseClient = window.createSupabaseClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                    testarConexao();
+                }
+            } catch (err) {
+                console.error("Erro ao iniciar cliente:", err);
+                connectionStatus.textContent = "Erro ao iniciar Supabase";
+                connectionStatus.className = "text-red-400";
+            }
+        }
+
         async function testarConexao() {
             if (!supabaseClient) return;
-            const { error } = await supabaseClient.from('conferencia').select('id').limit(1);
-            if (error) {
-                connectionStatus.textContent = "Conectado (Verifique permissões RLS)";
-                connectionStatus.className = "text-orange-400";
-            } else {
-                connectionStatus.textContent = "Conectado ao Supabase";
-                connectionStatus.className = "text-green-400";
+            try {
+                const { error } = await supabaseClient.from('conferencia').select('id').limit(1);
+                if (error) {
+                    connectionStatus.textContent = "Conectado (Verifique permissões RLS)";
+                    connectionStatus.className = "text-orange-400";
+                } else {
+                    connectionStatus.textContent = "Conectado ao Supabase";
+                    connectionStatus.className = "text-green-400";
+                }
+            } catch (e) {
+                connectionStatus.textContent = "Erro de conexão de rede";
+                connectionStatus.className = "text-red-400";
             }
         }
 
@@ -124,7 +133,7 @@
                 osc.start();
                 osc.stop(audioCtx.currentTime + 0.15);
             } catch (e) {
-                // Ignora bloqueio de autoplay
+                // Ignora restrição de autoplay
             }
         }
 
@@ -158,34 +167,32 @@
             }
         });
 
-        // Função inteligente para verificar correspondência parcial robusta
-        function volumes coincidem(volLido, volBanco) {
+        // Validação inteligente para etiquetas maiores que contêm o código do banco
+        function volumesCoincidem(volLido, volBanco) {
             if (!volLido || !volBanco) return false;
             const lido = volLido.trim();
             const banco = volBanco.trim();
 
-            // 1. Se um contém o outro exatamente
+            if (lido === banco) return true;
+            if (lido.startsWith(banco)) return true; // Trata quando a leitura tem sufixos no final
             if (lido.includes(banco) || banco.includes(lido)) return true;
-
-            // 2. Se a leitura for maior, valida se ela começa exatamente com o código cadastrado no banco (núcleo principal)
-            if (lido.startsWith(banco)) return true;
-
-            // 3. Validação por sub-trecho significativo (caso o banco tenha parte central do código lido)
-            if (banco.length >= 8 && lido.includes(banco)) return true;
 
             return false;
         }
 
         async function validarNoSupabase(nr, volume) {
             if (!supabaseClient) {
-                setFeedbackVisual(false, "ERRO", "Supabase não conectado.");
-                return;
+                // Tenta reinicializar caso tenha falhado no carregamento inicial
+                inicializarSupabase();
+                if (!supabaseClient) {
+                    setFeedbackVisual(false, "ERRO", "Supabase não conectado.");
+                    return;
+                }
             }
 
             const nrLimpa = nr.trim();
             const volumeLido = volume.trim();
 
-            // Busca os registros referentes à NR informada
             const { data: listaCandidatos } = await supabaseClient
                 .from('conferencia')
                 .select('*')
@@ -201,7 +208,6 @@
                 return;
             }
 
-            // Se não achou na NR certa, varre a base para identificar se pertence a outra NR (etiqueta invertida)
             const { data: todosRegistros } = await supabaseClient
                 .from('conferencia')
                 .select('*');
