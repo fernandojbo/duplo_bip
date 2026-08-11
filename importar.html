@@ -45,28 +45,29 @@
             status.textContent = "Processando...";
 
             Papa.parse(file, {
-                header: true,
-                skipEmptyLines: true,
-                complete: async (results) => {
-                    // Mapeia os dados conforme o nome das colunas no seu Supabase
-                    const data = results.data.map(row => ({
-                        VOLUME_CLIE: row.VOLUME_CLIE,
-                        NR: row.NR,
-                        NF: row.NF
-                    }));
-
-                    try {
-                        const { error } = await window.supabaseClient.from('conferencia').upsert(data);
-                        if (error) throw error;
-                        status.textContent = "✅ Importação concluída com sucesso!";
-                        status.className = "mt-4 text-center text-green-400";
-                    } catch (err) {
-                        status.textContent = "❌ Erro ao importar: " + err.message;
-                        status.className = "mt-4 text-center text-red-400";
-                    }
-                }
-            });
+    header: true,
+    skipEmptyLines: true,
+    complete: async (results) => {
+        // Mapeia flexibilizando maiúsculas/minúsculas para evitar erros de schema
+        const data = results.data.map(row => {
+            return {
+                VOLUME_CLIE: row.VOLUME_CLIE || row.volume_clie,
+                NR: row.NR || row.nr,
+                NF: row.NF || row.nf
+            };
         });
+
+        try {
+            const { error } = await window.supabaseClient.from('conferencia').upsert(data);
+            if (error) throw error;
+            status.textContent = "✅ Importação concluída com sucesso!";
+            status.className = "mt-4 text-center text-green-400";
+        } catch (err) {
+            status.textContent = "❌ Erro ao importar: " + err.message;
+            status.className = "mt-4 text-center text-red-400";
+        }
+    }
+});
     </script>
 </body>
 </html>
