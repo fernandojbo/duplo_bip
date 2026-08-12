@@ -165,11 +165,21 @@
         });
 
         // Validador flexível para lidar com tamanhos diferentes de códigos de barras (leitor vs banco)
-        function combina(lido, banco) {
+        // Validação restrita para a NR (permite sufixo/igualdade)
+        function combinaNr(lido, banco) {
             if (!lido || !banco) return false;
             const l = String(lido).trim();
             const b = String(banco).trim();
-            return l === b || l.includes(b) || b.includes(l);
+            return l === b || l.endsWith(b) || b.endsWith(l);
+        }
+
+        // Validação restrita para o Volume (evita o problema do .includes solto)
+        function combinaVolume(lido, banco) {
+            if (!lido || !banco) return false;
+            const l = String(lido).trim();
+            const b = String(banco).trim();
+            // Verifica igualdade exata ou se um contém o outro mas respeitando as pontas (início ou fim)
+            return l === b || l.startsWith(b) || l.endsWith(b) || b.includes(b) && (l.length > 15 && b.length > 15);
         }
 
         async function validarNoSupabase(nr, volume) {
@@ -185,7 +195,6 @@
             const volumeLido = String(volume).trim();
 
             try {
-                // Busca todos os registros para validação cruzada exata por linha
                 const { data: registros, error } = await supabaseClient
                     .from('conferencia')
                     .select('*');
@@ -197,9 +206,9 @@
                     return;
                 }
 
-                // 1. Procura se existe UMA LINHA onde a NR bate E o Volume bate simultaneamente
+                // 1. OBRIGA que a NR e o Volume estejam na MESMA linha exata da tabela
                 const linhaExata = registros.find(r => 
-                    combina(nrLimpa, r.nr) && combina(volumeLido, r.volume_clie)
+                    combinaNr(nrLimpa, r.nr) && combinaVolume(volumeLido, r.volume_clie)
                 );
 
                 if (linhaExata) {
@@ -207,9 +216,9 @@
                     return;
                 }
 
-                // 2. Se não achou na mesma linha, verifica se o volume pertence a OUTRA NR (Inversão)
+                // 2. Verifica se o volume pertence a OUTRA linha (Inversão de etiqueta)
                 const linhaOutro = registros.find(r => 
-                    combina(volumeLido, r.volume_clie)
+                    combinaVolume(volumeLido, r.volume_clie)
                 );
 
                 if (linhaOutro) {
