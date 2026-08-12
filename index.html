@@ -164,67 +164,65 @@
             }
         });
 
-        // Validação universal: Verifica se o código do banco está contido no volume lido, ou vice-versa
-        function volumeBateComBanco(volLido, volBanco) {
-            if (!volLido || !volBanco) return false;
-            const lido = volLido.trim();
-            const banco = volBanco.trim();
-
-            // Se forem idênticos, ou se o lido é maior e contém o do banco, ou se o do banco contém o lido
-            return lido === banco || lido.includes(banco) || banco.includes(lido);
+        // Função flexível para validar correspondência exata ou parcial de códigos
+        function codigoCombina(lido, banco) {
+            if (!lido || !banco) return false;
+            const l = String(lido).trim();
+            const b = String(banco).trim();
+            return l === b || l.endsWith(b) || b.endsWith(l) || l.includes(b) || b.includes(l);
         }
 
         async function validarNoSupabase(nr, volume) {
-    if (!supabaseClient) {
-        inicializarSupabase();
-        if (!supabaseClient) {
-            setFeedbackVisual(false, "ERRO", "Supabase não conectado.");
-            return;
+            if (!supabaseClient) {
+                inicializarSupabase();
+                if (!supabaseClient) {
+                    setFeedbackVisual(false, "ERRO", "Supabase não conectado.");
+                    return;
+                }
+            }
+
+            const nrLimpa = String(nr).trim();
+            const volumeLido = String(volume).trim();
+
+            try {
+                // Busca registros que contenham a NR lida (ou parcial) para avaliar na mesma linha
+                const { data: registrosNr, error } = await supabaseClient
+                    .from('conferencia')
+                    .select('*');
+
+                if (error) throw error;
+
+                if (!registrosNr || registrosNr.length === 0) {
+                    setFeedbackVisual(false, "DIVERGÊNCIA", "Nenhum dado encontrado na base.");
+                    return;
+                }
+
+                // Filtra no cliente usando flexibilidade para lidar com variações de leitores de código de barras
+                const linhaExata = registrosNr.find(r => 
+                    codigoCombina(nrLimpa, r.nr) && codigoCombina(volumeLido, r.volume_clie)
+                );
+
+                if (linhaExata) {
+                    setFeedbackVisual(true, "CONFERIDO COM SUCESSO", null);
+                    return;
+                }
+
+                // Se não achou na mesma linha, verifica se o volume pertence a OUTRA NR
+                const volumeEmOutraLinha = registrosNr.find(r => 
+                    codigoCombina(volumeLido, r.volume_clie)
+                );
+
+                if (volumeEmOutraLinha) {
+                    setFeedbackVisual(false, "ERRO: ETIQUETA INVERTIDA!", `Este volume pertence à NR: ${String(volumeEmOutraLinha.nr).trim()} | NF: ${volumeEmOutraLinha.nf || 'Não informada'}`);
+                } else {
+                    setFeedbackVisual(false, "DIVERGÊNCIA ENCONTRADA", "Este volume não consta na base de dados para nenhuma NR.");
+                }
+
+            } catch (err) {
+                console.error("Erro na consulta:", err);
+                setFeedbackVisual(false, "ERRO DE CONSULTA", "Falha ao buscar dados no Supabase.");
+            }
         }
-    }
-
-    const nrLimpa = String(nr).trim();
-    const volumeLido = String(volume).trim();
-
-    try {
-        // Busca na tabela registros que correspondam EXATAMENTE à NR e ao Volume na mesma linha
-        const { data: registrosExatos, error } = await supabaseClient
-            .from('conferencia')
-            .select('*')
-            .eq('nr', nrLimpa)
-            .eq('volume_clie', volumeLido);
-
-        if (error) throw error;
-
-        // Se encontrou a combinação exata na mesma linha
-        if (registrosExatos && registrosExatos.length > 0) {
-            setFeedbackVisual(true, "CONFERIDO COM SUCESSO", null);
-            return;
-        }
-
-        // Se não achou na mesma linha, vamos investigar o motivo para dar o feedback correto:
-        // 1. O volume existe no banco, mas pertence a OUTRA NR? (Inversão de etiqueta)
-        const { data: registroOutraNr, error: errOutra } = await supabaseClient
-            .from('conferencia')
-            .select('*')
-            .eq('volume_clie', volumeLido);
-
-        if (errOutra) throw errOutra;
-
-        if (registroOutraNr && registroOutraNr.length > 0) {
-            // Pega a primeira ocorrência errada para avisar o operador
-            const outro = registroOutraNr[0];
-            setFeedbackVisual(false, "ERRO: ETIQUETA INVERTIDA!", `Este volume pertence à NR: ${String(outro.nr).trim()} | NF: ${outro.nf || 'Não informada'}`);
-        } else {
-            // 2. O volume nem sequer existe na base de dados
-            setFeedbackVisual(false, "DIVERGÊNCIA ENCONTRADA", "Este volume não consta na base de dados para nenhuma NR.");
-        }
-
-    } catch (err) {
-        console.error("Erro na consulta:", err);
-        setFeedbackVisual(false, "ERRO DE CONSULTA", "Falha ao buscar dados no Supabase.");
-    }
-}
 
         function setFeedbackVisual(sucesso, mensagem, detalheExtra) {
             instructionTitle.textContent = mensagem;
