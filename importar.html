@@ -15,7 +15,11 @@
 
     <div class="bg-slate-800 p-8 rounded-2xl shadow-xl w-full max-w-lg border border-slate-700">
         <h2 class="text-2xl font-bold mb-2 text-white">Importar Dados</h2>
-        <p class="text-slate-400 text-sm mb-6">Selecione um arquivo CSV com as colunas: <code class="bg-slate-900 px-1 rounded">VOLUME_CLIE, NR, NF</code></p>
+        <p class="text-slate-400 text-sm mb-6">
+            Selecione um arquivo CSV com as colunas: 
+            <code class="bg-slate-900 px-1 rounded">VOLUME_CLIE, NR, NF</code><br>
+            <span class="text-xs text-slate-500 italic mt-1 block">O sistema aceita cabeçalhos em qualquer formato (ex: NR, nr, Nr).</span>
+        </p>
 
         <div class="border-2 border-dashed border-slate-600 rounded-xl p-8 text-center hover:border-amber-500 transition-colors">
             <input type="file" id="csvFile" accept=".csv" class="hidden">
@@ -41,33 +45,40 @@
             const file = document.getElementById('csvFile').files[0];
             if (!file) return alert('Selecione um arquivo!');
             
+            const btn = document.getElementById('btnImportar');
             const status = document.getElementById('status');
+            btn.disabled = true;
             status.textContent = "Processando...";
+            status.className = "mt-4 text-center text-sm font-semibold text-slate-400";
 
             Papa.parse(file, {
-    header: true,
-    skipEmptyLines: true,
-    complete: async (results) => {
-        // Mapeia flexibilizando maiúsculas/minúsculas para evitar erros de schema
-        const data = results.data.map(row => {
-            return {
-                VOLUME_CLIE: row.VOLUME_CLIE || row.volume_clie,
-                NR: row.NR || row.nr,
-                NF: row.NF || row.nf
-            };
-        });
+                header: true,
+                skipEmptyLines: true,
+                complete: async (results) => {
+                    // Mapeia flexibilizando maiúsculas/minúsculas para garantir compatibilidade com o banco
+                    const data = results.data.map(row => {
+                        return {
+                            volume_clie: row.VOLUME_CLIE || row.volume_clie || row.Volume_Clie,
+                            nr: row.NR || row.nr || row.Nr,
+                            nf: row.NF || row.nf || row.Nf
+                        };
+                    });
 
-        try {
-            const { error } = await window.supabaseClient.from('conferencia').upsert(data);
-            if (error) throw error;
-            status.textContent = "✅ Importação concluída com sucesso!";
-            status.className = "mt-4 text-center text-green-400";
-        } catch (err) {
-            status.textContent = "❌ Erro ao importar: " + err.message;
-            status.className = "mt-4 text-center text-red-400";
-        }
-    }
-});
+                    try {
+                        const { error } = await window.supabaseClient.from('conferencia').upsert(data);
+                        if (error) throw error;
+                        
+                        status.textContent = "✅ Importação concluída com sucesso!";
+                        status.className = "mt-4 text-center text-green-400 font-semibold";
+                    } catch (err) {
+                        status.textContent = "❌ Erro ao importar: " + err.message;
+                        status.className = "mt-4 text-center text-red-400 font-semibold";
+                    } finally {
+                        btn.disabled = false;
+                    }
+                }
+            });
+        });
     </script>
 </body>
 </html>
