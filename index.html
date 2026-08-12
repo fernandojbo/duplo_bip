@@ -35,7 +35,7 @@
                     <span id="display-volume" class="text-xl font-mono font-bold text-amber-400">-</span>
                 </div>
                 <div id="error-details" class="hidden mt-4 p-3 bg-red-900/50 border border-red-500 rounded-lg">
-                    <span class="text-xs text-red-300 block font-bold">⚠️ ATENÇÃO - INVERSÃO DETECTADA:</span>
+                    <span class="text-xs text-red-300 block font-bold">⚠️ ATENÇÃO:</span>
                     <span id="display-info-extra" class="text-sm font-mono text-white">-</span>
                 </div>
             </div>
@@ -164,63 +164,66 @@
             }
         });
 
-        // Função flexível para validar correspondência exata ou parcial de códigos
-        function codigoCombina(lido, banco) {
+        // Validador flexível para lidar com tamanhos diferentes de códigos de barras (leitor vs banco)
+        function combina(lido, banco) {
             if (!lido || !banco) return false;
             const l = String(lido).trim();
             const b = String(banco).trim();
-            return l === b || l.endsWith(b) || b.endsWith(l) || l.includes(b) || b.includes(l);
+            return l === b || l.includes(b) || b.includes(l);
         }
 
         async function validarNoSupabase(nr, volume) {
-    if (!supabaseClient) {
-        inicializarSupabase();
-        if (!supabaseClient) {
-            setFeedbackVisual(false, "ERRO", "Supabase não conectado.");
-            return;
+            if (!supabaseClient) {
+                inicializarSupabase();
+                if (!supabaseClient) {
+                    setFeedbackVisual(false, "ERRO", "Supabase não conectado.");
+                    return;
+                }
+            }
+
+            const nrLimpa = String(nr).trim();
+            const volumeLido = String(volume).trim();
+
+            try {
+                // Busca todos os registros para validação cruzada exata por linha
+                const { data: registros, error } = await supabaseClient
+                    .from('conferencia')
+                    .select('*');
+
+                if (error) throw error;
+
+                if (!registros || registros.length === 0) {
+                    setFeedbackVisual(false, "DIVERGÊNCIA", "Nenhum dado encontrado na base.");
+                    return;
+                }
+
+                // 1. Procura se existe UMA LINHA onde a NR bate E o Volume bate simultaneamente
+                const linhaExata = registros.find(r => 
+                    combina(nrLimpa, r.nr) && combina(volumeLido, r.volume_clie)
+                );
+
+                if (linhaExata) {
+                    setFeedbackVisual(true, "CONFERIDO COM SUCESSO", null);
+                    return;
+                }
+
+                // 2. Se não achou na mesma linha, verifica se o volume pertence a OUTRA NR (Inversão)
+                const linhaOutro = registros.find(r => 
+                    combina(volumeLido, r.volume_clie)
+                );
+
+                if (linhaOutro) {
+                    setFeedbackVisual(false, "ERRO: ETIQUETA INVERTIDA!", `Este volume pertence à NR: ${String(linhaOutro.nr).trim()} | NF: ${linhaOutro.nf || 'Não informada'}`);
+                } else {
+                    setFeedbackVisual(false, "DIVERGÊNCIA ENCONTRADA", "Este volume não consta na base de dados.");
+                }
+
+            } catch (err) {
+                console.error("Erro detalhado no Supabase:", err);
+                setFeedbackVisual(false, "ERRO DE CONSULTA", err.message || "Falha ao buscar dados no Supabase.");
+            }
         }
-    }
 
-    const nrLimpa = String(nr).trim();
-    const volumeLido = String(volume).trim();
-
-    try {
-        // 1. Pergunta direto ao Supabase: Existe uma linha que tenha EXATAMENTE esta NR e este Volume juntos?
-        const { data: linhaExata, error: errExato } = await supabaseClient
-            .from('conferencia')
-            .select('*')
-            .eq('nr', nrLimpa)
-            .eq('volume_clie', volumeLido);
-
-        if (errExato) throw errExato;
-
-        // Se encontrou a linha exata combinando os dois campos perfeitamente
-        if (linhaExata && linhaExata.length > 0) {
-            setFeedbackVisual(true, "CONFERIDO COM SUCESSO", null);
-            return;
-        }
-
-        // 2. Se não achou a combinação exata, vamos verificar se o volume existe em OUTRA NR (Inversão)
-        const { data: linhaOutroVolume, error: errOutro } = await supabaseClient
-            .from('conferencia')
-            .select('*')
-            .eq('volume_clie', volumeLido);
-
-        if (errOutra) throw errOutra;
-
-        if (linhaOutroVolume && linhaOutroVolume.length > 0) {
-            const outro = linhaOutroVolume[0];
-            setFeedbackVisual(false, "ERRO: ETIQUETA INVERTIDA!", `Este volume pertence à NR: ${String(outro.nr).trim()} | NF: ${outro.nf || 'Não informada'}`);
-        } else {
-            // 3. Se o volume não existe na base de jeito nenhum
-            setFeedbackVisual(false, "DIVERGÊNCIA ENCONTRADA", "Este volume não consta na base de dados para nenhuma NR.");
-        }
-
-    } catch (err) {
-        console.error("Erro na consulta:", err);
-        setFeedbackVisual(false, "ERRO DE CONSULTA", "Falha ao buscar dados no Supabase.");
-    }
-}
         function setFeedbackVisual(sucesso, mensagem, detalheExtra) {
             instructionTitle.textContent = mensagem;
             
