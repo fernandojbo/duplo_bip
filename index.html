@@ -142,6 +142,10 @@
 
         let nrAtual = '';
 
+        let processando = false;
+
+        let timeoutFeedback = null;
+
 
         /* ==========================================================
            ELEMENTOS DA INTERFACE
@@ -385,79 +389,92 @@
             'keydown',
             async function(e) {
 
-                if (e.key === 'Enter') {
+                if (e.key === 'Enter' && !processando) {
 
-                    const codigoLido =
-                        inputField.value.trim();
+                    processando = true;
 
+                    try {
 
-                    inputField.value = '';
-
-
-                    if (!codigoLido) return;
-
-
-                    /* ==================================================
-                       ETAPA 1
-                       LEITURA DA NR
-                       ================================================== */
-
-                    if (etapa === 1) {
-
-                        nrAtual = codigoLido;
-
-                        displayNr.textContent =
-                            nrAtual;
-
-                        displayVolume.textContent =
-                            '-';
-
-                        errorDetails.classList.add(
-                            'hidden'
-                        );
+                        const codigoLido =
+                            inputField.value.trim()
+                                .replace(/\r/g, '')
+                                .replace(/\n/g, '');
 
 
-                        etapa = 2;
+                        inputField.value = '';
 
 
-                        instructionTitle.textContent =
-                            "Aguardando Volume...";
+                        if (!codigoLido) {
+
+                            processando = false;
+                            return;
+
+                        }
 
 
-                        instructionSub.innerHTML =
-                            "Bipe a etiqueta de <strong>Volume</strong>";
+                        /* ==================================================
+                           ETAPA 1
+                           LEITURA DA NR
+                           ================================================== */
+
+                        if (etapa === 1) {
+
+                            nrAtual = codigoLido;
+
+                            displayNr.textContent =
+                                nrAtual;
+
+                            displayVolume.textContent =
+                                '-';
+
+                            errorDetails.classList.add(
+                                'hidden'
+                            );
 
 
-                        tocarSom('neutro');
+                            etapa = 2;
 
 
-                    }
+                            instructionTitle.textContent =
+                                "Aguardando Volume...";
 
 
-                    /* ==================================================
-                       ETAPA 2
-                       LEITURA DO VOLUME
-                       ================================================== */
-
-                    else if (etapa === 2) {
-
-                        const volumeLido =
-                            codigoLido;
+                            instructionSub.innerHTML =
+                                "Bipe a etiqueta de <strong>Volume</strong>";
 
 
-                        displayVolume.textContent =
-                            volumeLido;
+                            tocarSom('neutro');
+
+                        }
 
 
-                        await validarNoSupabase(
-                            nrAtual,
-                            volumeLido
-                        );
+                        /* ==================================================
+                           ETAPA 2
+                           LEITURA DO VOLUME
+                           ================================================== */
+
+                        else if (etapa === 2) {
+
+                            const volumeLido =
+                                codigoLido;
 
 
-                        etapa = 1;
+                            displayVolume.textContent =
+                                volumeLido;
 
-                        nrAtual = '';
+
+                            await validarNoSupabase(
+                                nrAtual,
+                                volumeLido
+                            );
+
+
+                            // O reset da etapa acontece dentro do setFeedbackVisual
+                        }
+
+                    } finally {
+
+                        processando = false;
 
                     }
 
@@ -468,17 +485,14 @@
 
 
         /* ==========================================================
-           VALIDAÇÃO NO SUPABASE
+           VALIDAÇÃO NO SUPABASE (VERSÃO OTIMIZADA COM BUSCA POR NÚCLEO)
            
-           IMPORTANTE:
-           
-           A validação agora funciona em duas etapas:
-
-           1. Localiza a NR.
-           2. Procura o volume SOMENTE nas linhas daquela NR.
-
-           Não existe mais procura aleatória do volume em toda
-           a tabela.
+           FUNCIONAMENTO:
+           1. Busca APENAS a linha onde nr = NR_LIDA
+           2. Verifica se volume_clie está CONTIDO no início do volume lido
+           3. Exemplo: volume_clie = '12345' aceita volume lido '1234567890'
+           4. Se encontrar → SUCESSO
+           5. Se não encontrar → ERRO (NR não existe OU volume não pertence à NR)
            ========================================================== */
 
         async function validarNoSupabase(nr, volume) {
@@ -518,21 +532,27 @@
                 String(volume).trim();
 
 
+            /* ======================================================
+               VALIDAÇÃO: BUSCA A NR E VERIFICA O VOLUME
+               
+               PASSO 1: Busca a NR
+               PASSO 2: Verifica se o volume_clie está no INÍCIO do volume lido
+               PASSO 3: Retorna sucesso ou erro
+               ====================================================== */
+
             try {
 
                 /* ==================================================
-                   BUSCA OS REGISTROS
-
-                   Mantido o mesmo funcionamento original:
-                   busca os registros da tabela conferencia.
+                   1. BUSCA OS REGISTROS DA NR ESPECÍFICA
                    ================================================== */
 
                 const {
-                    data: registros,
+                    data: registrosDaNR,
                     error
                 } = await supabaseClient
                     .from('conferencia')
-                    .select('*');
+                    .select('*')
+                    .eq('nr', nrLida);
 
 
                 if (error) {
@@ -543,46 +563,10 @@
 
 
                 /* ==================================================
-                   VERIFICA SE EXISTEM REGISTROS
+                   2. VERIFICA SE A NR EXISTE
                    ================================================== */
 
-                if (!registros || registros.length === 0) {
-
-                    setFeedbackVisual(
-                        false,
-                        "DIVERGÊNCIA",
-                        "Nenhum dado encontrado na base."
-                    );
-
-                    return;
-
-                }
-
-
-                /* ==================================================
-                   1. LOCALIZA A NR EXATA
-                   
-                   A partir daqui, o volume será analisado somente
-                   nos registros pertencentes à NR informada.
-                   ================================================== */
-
-                const registrosDaNR =
-                    registros.filter(r => {
-
-                        const nrBanco =
-                            String(r.nr || '').trim();
-
-
-                        return nrBanco === nrLida;
-
-                    });
-
-
-                /* ==================================================
-                   2. NR NÃO ENCONTRADA
-                   ================================================== */
-
-                if (registrosDaNR.length === 0) {
+                if (!registrosDaNR || registrosDaNR.length === 0) {
 
                     setFeedbackVisual(
                         false,
@@ -596,27 +580,16 @@
 
 
                 /* ==================================================
-                   3. PROCURA O VOLUME SOMENTE DENTRO DA NR
+                   3. PROCURA O VOLUME QUE ESTÁ NO INÍCIO DO CÓDIGO LIDO
                    
-                   Exemplo:
-
-                   volume_clie no banco:
-                   53128781000160001047
-
-                   volume lido:
-                   5312878100016000104762602080
-
-                   O sistema aceita porque o código lido começa
-                   exatamente com o volume cadastrado.
-
-                   IMPORTANTE:
-                   Não utiliza mais includes() nos dois sentidos.
-
-                   Isso evita que uma informação parcial do banco
-                   seja encontrada de maneira indevida.
+                   LÓGICA DE BUSCA POR NÚCLEO:
+                   - O volume_clie cadastrado tem MENOS caracteres
+                   - A etiqueta física tem MAIS caracteres
+                   - Exemplo: cadastro '12345' → etiqueta '1234567890'
+                   - O sistema verifica se o volume lido COMEÇA com o cadastrado
                    ================================================== */
 
-                const linhaExata =
+                const linhaEncontrada =
                     registrosDaNR.find(r => {
 
                         const volumeBanco =
@@ -625,29 +598,27 @@
                             ).trim();
 
 
-                        if (
-                            !volumeBanco ||
-                            !volumeLido
-                        ) {
+                        if (!volumeBanco || !volumeLido) {
 
                             return false;
 
                         }
 
 
-                        return (
-                            volumeLido === volumeBanco ||
-                            volumeLido.startsWith(volumeBanco)
-                        );
+                        // VERIFICA SE O VOLUME LIDO COMEÇA COM O VOLUME DO BANCO
+                        // Exemplo: volumeBanco = '53128781000160001047'
+                        //          volumeLido = '5312878100016000104762602080'
+                        //          RETORNA true porque o lido começa com o do banco
+                        return volumeLido.startsWith(volumeBanco);
 
                     });
 
 
                 /* ==================================================
-                   4. NR + VOLUME NA MESMA LINHA
+                   4. NR + VOLUME ENCONTRADOS NA MESMA LINHA
                    ================================================== */
 
-                if (linhaExata) {
+                if (linhaEncontrada) {
 
                     setFeedbackVisual(
                         true,
@@ -661,9 +632,10 @@
 
 
                 /* ==================================================
-                   5. NR EXISTE, MAS O VOLUME NÃO PERTENCE À NR
+                   5. NR EXISTE, MAS NENHUM VOLUME CORRESPONDE
                    ================================================== */
 
+                // Pega os volumes esperados para mostrar no erro
                 const volumesEsperados =
                     registrosDaNR
                         .map(r =>
@@ -684,10 +656,26 @@
                 );
 
 
+                // Mostra mensagem específica
+                let mensagemErro = "VOLUME NÃO PERTENCE À NR";
+                let detalheErro = `Volume ${volumeLido} não está vinculado à NR ${nrLida}`;
+
+                // Se houver apenas 1 volume esperado, mostra ele no erro
+                if (volumesEsperados.length === 1) {
+
+                    detalheErro = `Esperado: ${volumesEsperados[0]} | Lido: ${volumeLido}`;
+
+                } else if (volumesEsperados.length > 1) {
+
+                    detalheErro = `Volumes esperados: ${volumesEsperados.join(', ')} | Lido: ${volumeLido}`;
+
+                }
+
+
                 setFeedbackVisual(
                     false,
-                    "VOLUME NÃO PERTENCE À NR",
-                    `NR: ${nrLida} | Volume lido: ${volumeLido}`
+                    mensagemErro,
+                    detalheErro
                 );
 
 
@@ -720,6 +708,15 @@
             mensagem,
             detalheExtra
         ) {
+
+            // Cancela timeout anterior se existir
+            if (timeoutFeedback) {
+
+                clearTimeout(timeoutFeedback);
+                timeoutFeedback = null;
+
+            }
+
 
             instructionTitle.textContent =
                 mensagem;
@@ -778,7 +775,7 @@
 
 
             /* ======================================================
-               TEMPO DE EXIBIÇÃO
+               TEMPO DE EXIBIÇÃO E RESET
                ====================================================== */
 
             const tempoEspera =
@@ -787,7 +784,7 @@
                     : 4500;
 
 
-            setTimeout(() => {
+            timeoutFeedback = setTimeout(() => {
 
                 appBg.className =
                     "bg-slate-900 text-white h-screen flex flex-col justify-between transition-colors duration-300";
@@ -817,6 +814,13 @@
                     'hidden'
                 );
 
+
+                // RESETA A ETAPA APÓS O FEEDBACK
+                etapa = 1;
+                nrAtual = '';
+
+
+                timeoutFeedback = null;
 
             }, tempoEspera);
 
