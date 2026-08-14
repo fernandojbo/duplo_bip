@@ -50,7 +50,7 @@
                 </div>
 
                 <div id="cliente-info" class="hidden mt-2 p-2 bg-blue-900/50 border border-blue-500 rounded-lg">
-                    <span class="text-xs text-blue-300 block font-bold">📋 CLIENTE:</span>
+                    <span class="text-xs text-blue-300 block font-bold">📋 CLIENTE DETECTADO:</span>
                     <span id="display-cliente" class="text-sm font-mono text-white">-</span>
                 </div>
 
@@ -99,6 +99,26 @@
             // =====================================================
             'MOVEIS SAN': {
                 nome: 'MOVEIS SAN',
+                tipo: 'nucleo_20_digitos',
+                descricao: 'Código com núcleo de 20 dígitos + sufixo de 8 dígitos',
+                mascara: {
+                    extracao: function(codigoBipado) {
+                        if (codigoBipado.length >= 20) {
+                            return codigoBipado.substring(0, 20);
+                        }
+                        return codigoBipado;
+                    },
+                    validar: function(codigoBipado) {
+                        return codigoBipado.length >= 20;
+                    }
+                }
+            },
+
+            // =====================================================
+            // CLIENTE: MADEIRA MADEIRA (20 dígitos)
+            // =====================================================
+            'MADEIRA MADEIRA': {
+                nome: 'MADEIRA MADEIRA',
                 tipo: 'nucleo_20_digitos',
                 descricao: 'Código com núcleo de 20 dígitos + sufixo',
                 mascara: {
@@ -162,9 +182,19 @@
                 return 'MOVEIS SAN';
             }
             
+            // MADEIRA MADEIRA: 20 dígitos, começa com 87845
+            if (vol.length === 20 && vol.startsWith('87845')) {
+                return 'MADEIRA MADEIRA';
+            }
+            
             // LOJA ELECT: 10 dígitos, começa com 822
             if (vol.length === 10 && vol.startsWith('822')) {
                 return 'LOJA ELECT';
+            }
+            
+            // OUTROS: se tiver 20 dígitos, assume MOVEIS SAN
+            if (vol.length === 20) {
+                return 'MOVEIS SAN';
             }
             
             return 'default';
@@ -309,7 +339,7 @@
         });
 
         /* ==========================================================
-           VALIDAÇÃO NO SUPABASE
+           VALIDAÇÃO NO SUPABASE - COM DETECÇÃO AUTOMÁTICA
            ========================================================== */
 
         async function validarNoSupabase(nr, volume) {
@@ -325,6 +355,7 @@
             const volumeLido = String(volume).trim();
 
             try {
+                // 1. BUSCA OS REGISTROS DA NR
                 const { data: registrosDaNR, error } = await supabaseClient
                     .from('conferencia')
                     .select('*')
@@ -337,6 +368,7 @@
                     return;
                 }
 
+                // 2. DETECTA O CLIENTE E APLICA A MÁSCARA
                 let linhaEncontrada = null;
                 let clienteDetectado = '';
                 let nucleoExtraido = '';
@@ -344,25 +376,36 @@
                 for (const registro of registrosDaNR) {
                     const volumeBanco = String(registro.volume_clie || '').trim();
                     
+                    // DETECTA O CLIENTE PELO VOLUME_CLIE
                     clienteDetectado = detectarClientePorVolume(volumeBanco);
+                    
+                    // BUSCA A CONFIGURAÇÃO DO CLIENTE
                     const config = CONFIG_CLIENTES[clienteDetectado] || CONFIG_CLIENTES['default'];
+                    
+                    // APLICA A MÁSCARA (20 primeiros dígitos para MOVEIS SAN)
                     nucleoExtraido = config.mascara.extracao(volumeLido);
                     
-                    console.log(`🔍 Cliente: ${clienteDetectado}`, {
+                    console.log(`🔍 Cliente detectado: ${clienteDetectado}`, {
                         volumeBanco: volumeBanco,
                         volumeLido: volumeLido,
-                        nucleoExtraido: nucleoExtraido
+                        nucleoExtraido: nucleoExtraido,
+                        tamanhoBanco: volumeBanco.length,
+                        tamanhoLido: volumeLido.length
                     });
 
+                    // VALIDAÇÃO: compara o núcleo extraído com o cadastrado
                     if (nucleoExtraido === volumeBanco || volumeLido.startsWith(volumeBanco)) {
                         linhaEncontrada = registro;
                         break;
                     }
                 }
 
+                // 3. MOSTRA O CLIENTE NA TELA
                 if (clienteDetectado && clienteDetectado !== 'default') {
                     clienteInfo.classList.remove('hidden');
                     displayCliente.textContent = `${clienteDetectado} (detectado automaticamente)`;
+                } else {
+                    clienteInfo.classList.add('hidden');
                 }
 
                 if (linhaEncontrada && nucleoExtraido) {
@@ -372,6 +415,7 @@
                     matchInfo.classList.add('hidden');
                 }
 
+                // 4. RESULTADO
                 if (linhaEncontrada) {
                     setFeedbackVisual(true, "CONFERIDO COM SUCESSO", null);
                 } else {
