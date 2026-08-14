@@ -21,104 +21,63 @@
 
     <!-- Cabeçalho -->
     <header class="p-4 bg-slate-800 shadow-md text-center">
-
-        <h1 class="text-xl font-bold">
-            Conferência de Carga
-        </h1>
-
-        <p class="text-xs text-slate-400">
-            Sistema de Duplo Bip (NR + Volume)
-        </p>
-
+        <h1 class="text-xl font-bold">Conferência de Carga</h1>
+        <p class="text-xs text-slate-400">Sistema de Duplo Bip (NR + Volume)</p>
     </header>
 
-
-    <!-- Área Principal / Display -->
+    <!-- Área Principal -->
     <main class="flex-1 flex flex-col items-center justify-center p-6 text-center">
-
         <div id="status-box"
              class="w-full max-w-md p-8 rounded-2xl bg-slate-800 shadow-2xl border border-slate-700 transition-all">
 
-            <h2 id="instruction-title"
-                class="text-lg font-semibold text-slate-300 mb-2">
+            <h2 id="instruction-title" class="text-lg font-semibold text-slate-300 mb-2">
                 Aguardando Leitura...
             </h2>
 
-            <p id="instruction-sub"
-               class="text-sm text-slate-400 mb-6">
+            <p id="instruction-sub" class="text-sm text-slate-400 mb-6">
                 Bipe a etiqueta <strong>NR</strong>
             </p>
 
-
             <div class="space-y-3 text-left">
+                <div>
+                    <label class="text-xs text-slate-400 block">NR Lida:</label>
+                    <span id="display-nr" class="text-xl font-mono font-bold text-amber-400">-</span>
+                </div>
 
                 <div>
-
-                    <label class="text-xs text-slate-400 block">
-                        NR Lida:
-                    </label>
-
-                    <span id="display-nr"
-                          class="text-xl font-mono font-bold text-amber-400">
-                        -
-                    </span>
-
+                    <label class="text-xs text-slate-400 block">Volume Lido:</label>
+                    <span id="display-volume" class="text-xl font-mono font-bold text-amber-400">-</span>
                 </div>
 
-
-                <div>
-
-                    <label class="text-xs text-slate-400 block">
-                        Volume Lido:
-                    </label>
-
-                    <span id="display-volume"
-                          class="text-xl font-mono font-bold text-amber-400">
-                        -
-                    </span>
-
+                <div id="cliente-info" class="hidden mt-2 p-2 bg-blue-900/50 border border-blue-500 rounded-lg">
+                    <span class="text-xs text-blue-300 block font-bold">📋 CLIENTE:</span>
+                    <span id="display-cliente" class="text-sm font-mono text-white">-</span>
                 </div>
 
-
-                <div id="error-details"
-                     class="hidden mt-4 p-3 bg-red-900/50 border border-red-500 rounded-lg">
-
-                    <span class="text-xs text-red-300 block font-bold">
-                        ⚠️ ATENÇÃO:
-                    </span>
-
-                    <span id="display-info-extra"
-                          class="text-sm font-mono text-white">
-                        -
-                    </span>
-
+                <div id="match-info" class="hidden mt-2 p-2 bg-green-900/50 border border-green-500 rounded-lg">
+                    <span class="text-xs text-green-300 block font-bold">✅ NÚCLEO EXTRAÍDO:</span>
+                    <span id="display-match" class="text-sm font-mono text-white">-</span>
                 </div>
 
+                <div id="error-details" class="hidden mt-4 p-3 bg-red-900/50 border border-red-500 rounded-lg">
+                    <span class="text-xs text-red-300 block font-bold">⚠️ ATENÇÃO:</span>
+                    <span id="display-info-extra" class="text-sm font-mono text-white">-</span>
+                </div>
             </div>
-
         </div>
-
 
         <input type="text"
                id="barcode-input"
                class="opacity-0 absolute -top-10"
                autofocus
                autocomplete="off">
-
     </main>
 
-
-    <!-- Rodapé com Status -->
+    <!-- Rodapé -->
     <footer class="p-3 bg-slate-800 text-center text-xs text-slate-400">
-
         Status:
-        <span id="connection-status"
-              class="text-yellow-400">
-            Conectando ao Supabase...
-        </span>
-
+        <span id="connection-status" class="text-yellow-400">Conectando ao Supabase...</span>
     </footer>
-
 
     <script>
 
@@ -127,9 +86,85 @@
            ========================================================== */
 
         const SUPABASE_URL = 'https://fqrfknyludtvqaaajjoc.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_fkC9WhreuFmhmbVRCw6Isw_rftuBACx';
 
-        const SUPABASE_ANON_KEY =
-            'sb_publishable_fkC9WhreuFmhmbVRCw6Isw_rftuBACx';
+        /* ==========================================================
+           CONFIGURAÇÃO DE CLIENTES - MÁSCARAS
+           ========================================================== */
+
+        const CONFIG_CLIENTES = {
+
+            // =====================================================
+            // CLIENTE: MADEIRA MADEIRA (20 dígitos)
+            // =====================================================
+            'MADEIRA MADEIRA': {
+                nome: 'MADEIRA MADEIRA',
+                tipo: 'nucleo_20_digitos',
+                descricao: 'Código com núcleo de 20 dígitos + sufixo',
+                mascara: {
+                    extracao: function(codigoBipado) {
+                        if (codigoBipado.length >= 20) {
+                            return codigoBipado.substring(0, 20);
+                        }
+                        return codigoBipado;
+                    },
+                    validar: function(codigoBipado) {
+                        return codigoBipado.length >= 20 && /^\d+$/.test(codigoBipado);
+                    }
+                }
+            },
+
+            // =====================================================
+            // CLIENTE: LOJA ELECT (10 dígitos)
+            // =====================================================
+            'LOJA ELECT': {
+                nome: 'LOJA ELECT',
+                tipo: 'nucleo_10_digitos',
+                descricao: 'Código numérico com núcleo de 10 dígitos',
+                mascara: {
+                    extracao: function(codigoBipado) {
+                        return codigoBipado.substring(0, 10);
+                    },
+                    validar: function(codigoBipado) {
+                        return codigoBipado.length >= 10 && /^\d+$/.test(codigoBipado);
+                    }
+                }
+            },
+
+            // =====================================================
+            // CLIENTE: MOVEIS S. (fallback com startsWith)
+            // =====================================================
+            'MOVEIS S.': {
+                nome: 'MOVEIS S.',
+                tipo: 'nucleo_variavel',
+                descricao: 'Código com núcleo variável',
+                mascara: {
+                    extracao: function(codigoBipado) {
+                        return codigoBipado;
+                    },
+                    validar: function(codigoBipado) {
+                        return codigoBipado.length >= 10;
+                    }
+                }
+            },
+
+            // =====================================================
+            // CONFIGURAÇÃO PADRÃO (Fallback)
+            // =====================================================
+            'default': {
+                nome: 'Padrão',
+                tipo: 'padrao',
+                descricao: 'Validação por startsWith',
+                mascara: {
+                    extracao: function(codigoBipado) {
+                        return codigoBipado;
+                    },
+                    validar: function(codigoBipado) {
+                        return codigoBipado.length > 0;
+                    }
+                }
+            }
+        };
 
 
         /* ==========================================================
@@ -137,693 +172,282 @@
            ========================================================== */
 
         let supabaseClient = null;
-
         let etapa = 1;
-
         let nrAtual = '';
-
         let processando = false;
-
         let timeoutFeedback = null;
-
 
         /* ==========================================================
            ELEMENTOS DA INTERFACE
            ========================================================== */
 
-        const inputField =
-            document.getElementById('barcode-input');
-
-        const appBg =
-            document.getElementById('app-bg');
-
-        const statusBox =
-            document.getElementById('status-box');
-
-        const instructionTitle =
-            document.getElementById('instruction-title');
-
-        const instructionSub =
-            document.getElementById('instruction-sub');
-
-        const displayNr =
-            document.getElementById('display-nr');
-
-        const displayVolume =
-            document.getElementById('display-volume');
-
-        const connectionStatus =
-            document.getElementById('connection-status');
-
-        const errorDetails =
-            document.getElementById('error-details');
-
-        const displayInfoExtra =
-            document.getElementById('display-info-extra');
-
+        const inputField = document.getElementById('barcode-input');
+        const appBg = document.getElementById('app-bg');
+        const statusBox = document.getElementById('status-box');
+        const instructionTitle = document.getElementById('instruction-title');
+        const instructionSub = document.getElementById('instruction-sub');
+        const displayNr = document.getElementById('display-nr');
+        const displayVolume = document.getElementById('display-volume');
+        const connectionStatus = document.getElementById('connection-status');
+        const errorDetails = document.getElementById('error-details');
+        const displayInfoExtra = document.getElementById('display-info-extra');
+        const clienteInfo = document.getElementById('cliente-info');
+        const displayCliente = document.getElementById('display-cliente');
+        const matchInfo = document.getElementById('match-info');
+        const displayMatch = document.getElementById('display-match');
 
         /* ==========================================================
            MANTÉM FOCO NO LEITOR
            ========================================================== */
 
-        document.addEventListener('click', () => {
-
-            inputField.focus();
-
-        });
-
+        document.addEventListener('click', () => inputField.focus());
 
         /* ==========================================================
            INICIALIZAÇÃO SUPABASE
            ========================================================== */
 
-        window.addEventListener('supabase-ready', () => {
-
-            inicializarSupabase();
-
-        });
-
+        window.addEventListener('supabase-ready', () => inicializarSupabase());
 
         window.addEventListener('load', () => {
-
             inputField.focus();
-
-            if (window.createSupabaseClient && !supabaseClient) {
-
-                inicializarSupabase();
-
-            }
-
+            if (window.createSupabaseClient && !supabaseClient) inicializarSupabase();
         });
 
-
-        /* ==========================================================
-           CRIA CLIENTE SUPABASE
-           ========================================================== */
-
         function inicializarSupabase() {
-
             try {
-
                 if (!supabaseClient && window.createSupabaseClient) {
-
-                    supabaseClient =
-                        window.createSupabaseClient(
-                            SUPABASE_URL,
-                            SUPABASE_ANON_KEY
-                        );
-
+                    supabaseClient = window.createSupabaseClient(SUPABASE_URL, SUPABASE_ANON_KEY);
                     testarConexao();
-
                 }
-
             } catch (err) {
-
-                console.error(
-                    "Erro ao iniciar cliente:",
-                    err
-                );
-
-                connectionStatus.textContent =
-                    "Erro ao iniciar Supabase";
-
-                connectionStatus.className =
-                    "text-red-400";
-
+                console.error("Erro ao iniciar cliente:", err);
+                connectionStatus.textContent = "Erro ao iniciar Supabase";
+                connectionStatus.className = "text-red-400";
             }
-
         }
-
-
-        /* ==========================================================
-           TESTA CONEXÃO
-           ========================================================== */
 
         async function testarConexao() {
-
             if (!supabaseClient) return;
-
             try {
-
-                const { error } =
-                    await supabaseClient
-                        .from('conferencia')
-                        .select('id')
-                        .limit(1);
-
-
+                const { error } = await supabaseClient.from('conferencia').select('id').limit(1);
                 if (error) {
-
-                    connectionStatus.textContent =
-                        "Conectado (Verifique permissões RLS)";
-
-                    connectionStatus.className =
-                        "text-orange-400";
-
+                    connectionStatus.textContent = "Conectado (Verifique permissões RLS)";
+                    connectionStatus.className = "text-orange-400";
                 } else {
-
-                    connectionStatus.textContent =
-                        "Conectado ao Supabase";
-
-                    connectionStatus.className =
-                        "text-green-400";
-
+                    connectionStatus.textContent = "Conectado ao Supabase";
+                    connectionStatus.className = "text-green-400";
                 }
-
             } catch (e) {
-
-                connectionStatus.textContent =
-                    "Erro de conexão de rede";
-
-                connectionStatus.className =
-                    "text-red-400";
-
+                connectionStatus.textContent = "Erro de conexão de rede";
+                connectionStatus.className = "text-red-400";
             }
-
         }
-
 
         /* ==========================================================
            SONS
            ========================================================== */
 
         function tocarSom(tipo) {
-
             try {
-
-                const audioCtx =
-                    new (
-                        window.AudioContext ||
-                        window.webkitAudioContext
-                    )();
-
-
-                const osc =
-                    audioCtx.createOscillator();
-
-
-                const gain =
-                    audioCtx.createGain();
-
-
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
                 osc.connect(gain);
-
                 gain.connect(audioCtx.destination);
 
-
                 if (tipo === 'sucesso') {
-
-                    osc.frequency.setValueAtTime(
-                        880,
-                        audioCtx.currentTime
-                    );
-
-                    gain.gain.setValueAtTime(
-                        0.1,
-                        audioCtx.currentTime
-                    );
-
+                    osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+                    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
                 } else if (tipo === 'erro') {
-
-                    osc.frequency.setValueAtTime(
-                        200,
-                        audioCtx.currentTime
-                    );
-
-                    gain.gain.setValueAtTime(
-                        0.2,
-                        audioCtx.currentTime
-                    );
-
+                    osc.frequency.setValueAtTime(200, audioCtx.currentTime);
+                    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
                 } else {
-
-                    osc.frequency.setValueAtTime(
-                        440,
-                        audioCtx.currentTime
-                    );
-
-                    gain.gain.setValueAtTime(
-                        0.1,
-                        audioCtx.currentTime
-                    );
-
+                    osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+                    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
                 }
-
-
                 osc.start();
-
-                osc.stop(
-                    audioCtx.currentTime + 0.15
-                );
-
+                osc.stop(audioCtx.currentTime + 0.15);
             } catch (e) {}
-
         }
-
 
         /* ==========================================================
            LEITURA DO CÓDIGO DE BARRAS
            ========================================================== */
 
-        inputField.addEventListener(
-            'keydown',
-            async function(e) {
+        inputField.addEventListener('keydown', async function(e) {
+            if (e.key === 'Enter' && !processando) {
+                processando = true;
+                try {
+                    const codigoLido = inputField.value.trim().replace(/\r/g, '').replace(/\n/g, '');
+                    inputField.value = '';
+                    if (!codigoLido) { processando = false; return; }
 
-                if (e.key === 'Enter' && !processando) {
-
-                    processando = true;
-
-                    try {
-
-                        const codigoLido =
-                            inputField.value.trim()
-                                .replace(/\r/g, '')
-                                .replace(/\n/g, '');
-
-
-                        inputField.value = '';
-
-
-                        if (!codigoLido) {
-
-                            processando = false;
-                            return;
-
-                        }
-
-
-                        /* ==================================================
-                           ETAPA 1
-                           LEITURA DA NR
-                           ================================================== */
-
-                        if (etapa === 1) {
-
-                            nrAtual = codigoLido;
-
-                            displayNr.textContent =
-                                nrAtual;
-
-                            displayVolume.textContent =
-                                '-';
-
-                            errorDetails.classList.add(
-                                'hidden'
-                            );
-
-
-                            etapa = 2;
-
-
-                            instructionTitle.textContent =
-                                "Aguardando Volume...";
-
-
-                            instructionSub.innerHTML =
-                                "Bipe a etiqueta de <strong>Volume</strong>";
-
-
-                            tocarSom('neutro');
-
-                        }
-
-
-                        /* ==================================================
-                           ETAPA 2
-                           LEITURA DO VOLUME
-                           ================================================== */
-
-                        else if (etapa === 2) {
-
-                            const volumeLido =
-                                codigoLido;
-
-
-                            displayVolume.textContent =
-                                volumeLido;
-
-
-                            await validarNoSupabase(
-                                nrAtual,
-                                volumeLido
-                            );
-
-
-                            // O reset da etapa acontece dentro do setFeedbackVisual
-                        }
-
-                    } finally {
-
-                        processando = false;
-
+                    if (etapa === 1) {
+                        nrAtual = codigoLido;
+                        displayNr.textContent = nrAtual;
+                        displayVolume.textContent = '-';
+                        errorDetails.classList.add('hidden');
+                        clienteInfo.classList.add('hidden');
+                        matchInfo.classList.add('hidden');
+                        etapa = 2;
+                        instructionTitle.textContent = "Aguardando Volume...";
+                        instructionSub.innerHTML = "Bipe a etiqueta de <strong>Volume</strong>";
+                        tocarSom('neutro');
+                    } else if (etapa === 2) {
+                        const volumeLido = codigoLido;
+                        displayVolume.textContent = volumeLido;
+                        await validarNoSupabase(nrAtual, volumeLido);
                     }
-
+                } finally {
+                    processando = false;
                 }
-
             }
-        );
-
+        });
 
         /* ==========================================================
-           VALIDAÇÃO NO SUPABASE (VERSÃO OTIMIZADA COM BUSCA POR NÚCLEO)
-           
-           FUNCIONAMENTO:
-           1. Busca APENAS a linha onde nr = NR_LIDA
-           2. Verifica se volume_clie está CONTIDO no início do volume lido
-           3. Exemplo: volume_clie = '12345' aceita volume lido '1234567890'
-           4. Se encontrar → SUCESSO
-           5. Se não encontrar → ERRO (NR não existe OU volume não pertence à NR)
+           VALIDAÇÃO NO SUPABASE - COM MÁSCARAS POR CLIENTE
            ========================================================== */
 
         async function validarNoSupabase(nr, volume) {
-
-            /* ======================================================
-               VERIFICA CONEXÃO
-               ====================================================== */
-
             if (!supabaseClient) {
-
                 inicializarSupabase();
-
                 if (!supabaseClient) {
-
-                    setFeedbackVisual(
-                        false,
-                        "ERRO",
-                        "Supabase não conectado."
-                    );
-
+                    setFeedbackVisual(false, "ERRO", "Supabase não conectado.");
                     return;
-
                 }
-
             }
 
-
-            /* ======================================================
-               LIMPA OS VALORES LIDOS
-               ====================================================== */
-
-            const nrLida =
-                String(nr).trim();
-
-
-            const volumeLido =
-                String(volume).trim();
-
-
-            /* ======================================================
-               VALIDAÇÃO: BUSCA A NR E VERIFICA O VOLUME
-               
-               PASSO 1: Busca a NR
-               PASSO 2: Verifica se o volume_clie está no INÍCIO do volume lido
-               PASSO 3: Retorna sucesso ou erro
-               ====================================================== */
+            const nrLida = String(nr).trim();
+            const volumeLido = String(volume).trim();
 
             try {
-
-                /* ==================================================
-                   1. BUSCA OS REGISTROS DA NR ESPECÍFICA
-                   ================================================== */
-
-                const {
-                    data: registrosDaNR,
-                    error
-                } = await supabaseClient
+                // 1. BUSCA OS REGISTROS DA NR
+                const { data: registrosDaNR, error } = await supabaseClient
                     .from('conferencia')
                     .select('*')
                     .eq('nr', nrLida);
 
+                if (error) throw error;
 
-                if (error) {
-
-                    throw error;
-
-                }
-
-
-                /* ==================================================
-                   2. VERIFICA SE A NR EXISTE
-                   ================================================== */
-
+                // 2. VERIFICA SE A NR EXISTE
                 if (!registrosDaNR || registrosDaNR.length === 0) {
-
-                    setFeedbackVisual(
-                        false,
-                        "NR NÃO ENCONTRADA",
-                        `A NR ${nrLida} não existe na base de dados.`
-                    );
-
+                    setFeedbackVisual(false, "NR NÃO ENCONTRADA", `A NR ${nrLida} não existe na base.`);
                     return;
-
                 }
 
+                // 3. PROCURA O VOLUME COM AS REGRAS DO CLIENTE
+                let linhaEncontrada = null;
+                let clienteNome = '';
+                let nucleoExtraido = '';
+                let volumeBancoMatch = '';
 
-                /* ==================================================
-                   3. PROCURA O VOLUME QUE ESTÁ NO INÍCIO DO CÓDIGO LIDO
-                   
-                   LÓGICA DE BUSCA POR NÚCLEO:
-                   - O volume_clie cadastrado tem MENOS caracteres
-                   - A etiqueta física tem MAIS caracteres
-                   - Exemplo: cadastro '12345' → etiqueta '1234567890'
-                   - O sistema verifica se o volume lido COMEÇA com o cadastrado
-                   ================================================== */
+                for (const registro of registrosDaNR) {
+                    const volumeBanco = String(registro.volume_clie || '').trim();
+                    
+                    // Pega o nome do cliente (pode vir do banco)
+                    const nomeCliente = registro.remetente || registro.cliente || 'default';
+                    clienteNome = nomeCliente;
 
-                const linhaEncontrada =
-                    registrosDaNR.find(r => {
-
-                        const volumeBanco =
-                            String(
-                                r.volume_clie || ''
-                            ).trim();
-
-
-                        if (!volumeBanco || !volumeLido) {
-
-                            return false;
-
-                        }
-
-
-                        // VERIFICA SE O VOLUME LIDO COMEÇA COM O VOLUME DO BANCO
-                        // Exemplo: volumeBanco = '53128781000160001047'
-                        //          volumeLido = '5312878100016000104762602080'
-                        //          RETORNA true porque o lido começa com o do banco
-                        return volumeLido.startsWith(volumeBanco);
-
+                    // Busca a configuração do cliente
+                    const config = CONFIG_CLIENTES[nomeCliente] || CONFIG_CLIENTES['default'];
+                    
+                    // APLICA A MÁSCARA: extrai o núcleo do código bipado
+                    nucleoExtraido = config.mascara.extracao(volumeLido);
+                    
+                    console.log(`🔍 Cliente: ${nomeCliente}`, {
+                        volumeBanco: volumeBanco,
+                        volumeLido: volumeLido,
+                        nucleoExtraido: nucleoExtraido,
+                        config: config
                     });
 
-
-                /* ==================================================
-                   4. NR + VOLUME ENCONTRADOS NA MESMA LINHA
-                   ================================================== */
-
-                if (linhaEncontrada) {
-
-                    setFeedbackVisual(
-                        true,
-                        "CONFERIDO COM SUCESSO",
-                        null
-                    );
-
-                    return;
-
+                    // VALIDAÇÃO: 
+                    // 1. O núcleo extraído é igual ao cadastrado?
+                    // 2. Ou o lido começa com o cadastrado (fallback)?
+                    if (nucleoExtraido === volumeBanco || volumeLido.startsWith(volumeBanco)) {
+                        linhaEncontrada = registro;
+                        volumeBancoMatch = volumeBanco;
+                        break;
+                    }
                 }
 
+                // 4. MOSTRA O CLIENTE E O NÚCLEO NA TELA
+                if (clienteNome && clienteNome !== 'default') {
+                    clienteInfo.classList.remove('hidden');
+                    displayCliente.textContent = `${clienteNome} (${CONFIG_CLIENTES[clienteNome]?.tipo || 'padrão'})`;
+                }
 
-                /* ==================================================
-                   5. NR EXISTE, MAS NENHUM VOLUME CORRESPONDE
-                   ================================================== */
+                if (linhaEncontrada && nucleoExtraido) {
+                    matchInfo.classList.remove('hidden');
+                    displayMatch.textContent = `${nucleoExtraido} ✅`;
+                } else {
+                    matchInfo.classList.add('hidden');
+                }
 
-                // Pega os volumes esperados para mostrar no erro
-                const volumesEsperados =
-                    registrosDaNR
-                        .map(r =>
-                            String(
-                                r.volume_clie || ''
-                            ).trim()
-                        )
+                // 5. RESULTADO
+                if (linhaEncontrada) {
+                    setFeedbackVisual(true, "CONFERIDO COM SUCESSO", null);
+                } else {
+                    // Mostra os volumes esperados para ajudar o conferente
+                    const volumesEsperados = registrosDaNR
+                        .map(r => String(r.volume_clie || '').trim())
                         .filter(v => v !== '');
 
-
-                console.warn(
-                    "NR encontrada, porém volume divergente.",
-                    {
-                        nrLida: nrLida,
-                        volumeLido: volumeLido,
-                        volumesEsperados: volumesEsperados
-                    }
-                );
-
-
-                // Mostra mensagem específica
-                let mensagemErro = "VOLUME NÃO PERTENCE À NR";
-                let detalheErro = `Volume ${volumeLido} não está vinculado à NR ${nrLida}`;
-
-                // Se houver apenas 1 volume esperado, mostra ele no erro
-                if (volumesEsperados.length === 1) {
-
-                    detalheErro = `Esperado: ${volumesEsperados[0]} | Lido: ${volumeLido}`;
-
-                } else if (volumesEsperados.length > 1) {
-
-                    detalheErro = `Volumes esperados: ${volumesEsperados.join(', ')} | Lido: ${volumeLido}`;
-
+                    setFeedbackVisual(false, "VOLUME NÃO PERTENCE À NR",
+                        `NR: ${nrLida} | Esperado: ${volumesEsperados.join(', ')} | Lido: ${volumeLido}`);
                 }
 
-
-                setFeedbackVisual(
-                    false,
-                    mensagemErro,
-                    detalheErro
-                );
-
-
             } catch (err) {
-
-                console.error(
-                    "Erro detalhado no Supabase:",
-                    err
-                );
-
-
-                setFeedbackVisual(
-                    false,
-                    "ERRO DE CONSULTA",
-                    err.message ||
-                    "Falha ao buscar dados no Supabase."
-                );
-
+                console.error("Erro detalhado no Supabase:", err);
+                setFeedbackVisual(false, "ERRO DE CONSULTA", err.message || "Falha ao buscar dados.");
             }
-
         }
-
 
         /* ==========================================================
            FEEDBACK VISUAL
            ========================================================== */
 
-        function setFeedbackVisual(
-            sucesso,
-            mensagem,
-            detalheExtra
-        ) {
-
-            // Cancela timeout anterior se existir
+        function setFeedbackVisual(sucesso, mensagem, detalheExtra) {
             if (timeoutFeedback) {
-
                 clearTimeout(timeoutFeedback);
                 timeoutFeedback = null;
-
             }
 
-
-            instructionTitle.textContent =
-                mensagem;
-
+            instructionTitle.textContent = mensagem;
 
             if (sucesso) {
-
-                appBg.className =
-                    "bg-green-600 text-white h-screen flex flex-col justify-between transition-colors duration-300";
-
-
-                statusBox.className =
-                    "w-full max-w-md p-8 rounded-2xl bg-green-700 shadow-2xl border border-green-500 transition-all";
-
-
-                errorDetails.classList.add(
-                    'hidden'
-                );
-
-
+                appBg.className = "bg-green-600 text-white h-screen flex flex-col justify-between transition-colors duration-300";
+                statusBox.className = "w-full max-w-md p-8 rounded-2xl bg-green-700 shadow-2xl border border-green-500 transition-all";
+                errorDetails.classList.add('hidden');
                 tocarSom('sucesso');
-
-
             } else {
-
-                appBg.className =
-                    "bg-red-600 text-white h-screen flex flex-col justify-between transition-colors duration-300";
-
-
-                statusBox.className =
-                    "w-full max-w-md p-8 rounded-2xl bg-red-700 shadow-2xl border border-red-500 transition-all";
-
-
+                appBg.className = "bg-red-600 text-white h-screen flex flex-col justify-between transition-colors duration-300";
+                statusBox.className = "w-full max-w-md p-8 rounded-2xl bg-red-700 shadow-2xl border border-red-500 transition-all";
                 if (detalheExtra) {
-
-                    displayInfoExtra.textContent =
-                        detalheExtra;
-
-
-                    errorDetails.classList.remove(
-                        'hidden'
-                    );
-
+                    displayInfoExtra.textContent = detalheExtra;
+                    errorDetails.classList.remove('hidden');
                 } else {
-
-                    errorDetails.classList.add(
-                        'hidden'
-                    );
-
+                    errorDetails.classList.add('hidden');
                 }
-
-
                 tocarSom('erro');
-
             }
 
-
-            /* ======================================================
-               TEMPO DE EXIBIÇÃO E RESET
-               ====================================================== */
-
-            const tempoEspera =
-                sucesso
-                    ? 2500
-                    : 4500;
-
+            const tempoEspera = sucesso ? 2500 : 4500;
 
             timeoutFeedback = setTimeout(() => {
-
-                appBg.className =
-                    "bg-slate-900 text-white h-screen flex flex-col justify-between transition-colors duration-300";
-
-
-                statusBox.className =
-                    "w-full max-w-md p-8 rounded-2xl bg-slate-800 shadow-2xl border border-slate-700 transition-all";
-
-
-                instructionTitle.textContent =
-                    "Aguardando Leitura...";
-
-
-                instructionSub.innerHTML =
-                    "Bipe a etiqueta <strong>NR</strong>";
-
-
-                displayNr.textContent =
-                    "-";
-
-
-                displayVolume.textContent =
-                    "-";
-
-
-                errorDetails.classList.add(
-                    'hidden'
-                );
-
-
-                // RESETA A ETAPA APÓS O FEEDBACK
+                appBg.className = "bg-slate-900 text-white h-screen flex flex-col justify-between transition-colors duration-300";
+                statusBox.className = "w-full max-w-md p-8 rounded-2xl bg-slate-800 shadow-2xl border border-slate-700 transition-all";
+                instructionTitle.textContent = "Aguardando Leitura...";
+                instructionSub.innerHTML = "Bipe a etiqueta <strong>NR</strong>";
+                displayNr.textContent = "-";
+                displayVolume.textContent = "-";
+                errorDetails.classList.add('hidden');
+                clienteInfo.classList.add('hidden');
+                matchInfo.classList.add('hidden');
                 etapa = 1;
                 nrAtual = '';
-
-
                 timeoutFeedback = null;
-
             }, tempoEspera);
-
         }
 
     </script>
