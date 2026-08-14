@@ -49,6 +49,11 @@
                     <span id="display-volume" class="text-xl font-mono font-bold text-amber-400">-</span>
                 </div>
 
+                <div id="progress-info" class="hidden mt-2 p-2 bg-purple-900/50 border border-purple-500 rounded-lg">
+                    <span class="text-xs text-purple-300 block font-bold">📊 PROGRESSO:</span>
+                    <span id="display-progress" class="text-sm font-mono text-white">-</span>
+                </div>
+
                 <div id="cliente-info" class="hidden mt-2 p-2 bg-blue-900/50 border border-blue-500 rounded-lg">
                     <span class="text-xs text-blue-300 block font-bold">📋 CLIENTE DETECTADO:</span>
                     <span id="display-cliente" class="text-sm font-mono text-white">-</span>
@@ -182,11 +187,6 @@
                 return 'MOVEIS SAN';
             }
             
-            // MADEIRA MADEIRA: 20 dígitos, começa com 87845
-            if (vol.length === 20 && vol.startsWith('87845')) {
-                return 'MADEIRA MADEIRA';
-            }
-            
             // LOJA ELECT: 10 dígitos, começa com 822
             if (vol.length === 10 && vol.startsWith('822')) {
                 return 'LOJA ELECT';
@@ -199,6 +199,46 @@
             
             return 'default';
         }
+
+
+        /* ==========================================================
+           FUNÇÃO PARA EXTRAIR O NÚMERO DO VOLUME DO CÓDIGO BIPADO
+           ========================================================== */
+
+        function extrairNumeroVolume(codigoBipado) {
+            // Tenta extrair o número do volume do final do código
+            // Exemplo: 8784536800013900009565501010 → 1
+            // Exemplo: 8784536800013900009565501020 → 2
+            
+            // Procura por ...1010, ...1020, ...1030 no final
+            const match = codigoBipado.match(/(\d{3})(\d{2})$/);
+            if (match) {
+                // Pega os últimos 5 dígitos: 01010 → 1
+                const ultimos5 = match[1] + match[2];
+                const numero = parseInt(ultimos5.substring(3, 5));
+                
+                if (numero % 10 === 0) {
+                    return numero / 10; // 10 → 1, 20 → 2, 30 → 3
+                }
+            }
+            
+            // Tenta extrair do formato: ...-001, .../001
+            const match2 = codigoBipado.match(/[-/](\d{3})$/);
+            if (match2) {
+                return parseInt(match2[1]);
+            }
+            
+            // Se não conseguir extrair, retorna null
+            return null;
+        }
+
+
+        /* ==========================================================
+           CONTROLE DE VOLUMES CONFERIDOS POR NR
+           ========================================================== */
+
+        const volumesConferidos = {}; // { 'NR': quantidade }
+        const totalVolumesPorNR = {}; // { 'NR': total }
 
 
         /* ==========================================================
@@ -229,6 +269,8 @@
         const displayCliente = document.getElementById('display-cliente');
         const matchInfo = document.getElementById('match-info');
         const displayMatch = document.getElementById('display-match');
+        const progressInfo = document.getElementById('progress-info');
+        const displayProgress = document.getElementById('display-progress');
 
         /* ==========================================================
            MANTÉM FOCO NO LEITOR
@@ -323,6 +365,11 @@
                         errorDetails.classList.add('hidden');
                         clienteInfo.classList.add('hidden');
                         matchInfo.classList.add('hidden');
+                        progressInfo.classList.add('hidden');
+                        
+                        // Busca o total de volumes para esta NR
+                        await buscarTotalVolumes(nrAtual);
+                        
                         etapa = 2;
                         instructionTitle.textContent = "Aguardando Volume...";
                         instructionSub.innerHTML = "Bipe a etiqueta de <strong>Volume</strong>";
@@ -339,7 +386,28 @@
         });
 
         /* ==========================================================
-           VALIDAÇÃO NO SUPABASE - COM DETECÇÃO AUTOMÁTICA
+           BUSCAR TOTAL DE VOLUMES DA NR
+           ========================================================== */
+
+        async function buscarTotalVolumes(nr) {
+            if (!supabaseClient) return;
+            
+            try {
+                const { data, error } = await supabaseClient
+                    .from('conferencia')
+                    .select('id')
+                    .eq('nr', nr);
+
+                if (!error && data) {
+                    totalVolumesPorNR[nr] = data.length;
+                }
+            } catch (e) {
+                console.error("Erro ao buscar total de volumes:", e);
+            }
+        }
+
+        /* ==========================================================
+           VALIDAÇÃO NO SUPABASE - COM CONTROLE DE ORDEM DOS VOLUMES
            ========================================================== */
 
         async function validarNoSupabase(nr, volume) {
@@ -368,7 +436,36 @@
                     return;
                 }
 
-                // 2. DETECTA O CLIENTE E APLICA A MÁSCARA
+                // 2. INICIALIZA O CONTADOR PARA ESTA NR
+                if (!volumesConferidos[nrLida]) {
+                    volumesConferidos[nrLida] = 0;
+                }
+
+                // 3. EXTRAI O NÚMERO DO VOLUME DO CÓDIGO BIPADO
+                const numeroVolume = extrairNumeroVolume(volumeLido);
+                const totalVolumes = registrosDaNR.length;
+                const proximoEsperado = volumesConferidos[nrLida] + 1;
+
+                console.log(`🔍 Volume bipado: ${numeroVolume}`, {
+                    codigoBipado: volumeLido,
+                    numeroVolume: numeroVolume,
+                    proximoEsperado: proximoEsperado,
+                    total: totalVolumes,
+                    jaConferidos: volumesConferidos[nrLida]
+                });
+
+                // 4. MOSTRA O PROGRESSO
+                progressInfo.classList.remove('hidden');
+                displayProgress.textContent = `${volumesConferidos[nrLida]} de ${totalVolumes} volumes conferidos`;
+
+                // 5. VERIFICA SE É O VOLUME ESPERADO
+                if (numeroVolume !== null && numeroVolume !== proximoEsperado) {
+                    setFeedbackVisual(false, "VOLUME FORA DE ORDEM",
+                        `Esperado: ${String(proximoEsperado).padStart(3, '0')}/${String(totalVolumes).padStart(3, '0')} | Bipado: ${String(numeroVolume).padStart(3, '0')}`);
+                    return;
+                }
+
+                // 6. VALIDA O CÓDIGO (extrai o núcleo)
                 let linhaEncontrada = null;
                 let clienteDetectado = '';
                 let nucleoExtraido = '';
@@ -376,31 +473,17 @@
                 for (const registro of registrosDaNR) {
                     const volumeBanco = String(registro.volume_clie || '').trim();
                     
-                    // DETECTA O CLIENTE PELO VOLUME_CLIE
                     clienteDetectado = detectarClientePorVolume(volumeBanco);
-                    
-                    // BUSCA A CONFIGURAÇÃO DO CLIENTE
                     const config = CONFIG_CLIENTES[clienteDetectado] || CONFIG_CLIENTES['default'];
-                    
-                    // APLICA A MÁSCARA (20 primeiros dígitos para MOVEIS SAN)
                     nucleoExtraido = config.mascara.extracao(volumeLido);
                     
-                    console.log(`🔍 Cliente detectado: ${clienteDetectado}`, {
-                        volumeBanco: volumeBanco,
-                        volumeLido: volumeLido,
-                        nucleoExtraido: nucleoExtraido,
-                        tamanhoBanco: volumeBanco.length,
-                        tamanhoLido: volumeLido.length
-                    });
-
-                    // VALIDAÇÃO: compara o núcleo extraído com o cadastrado
                     if (nucleoExtraido === volumeBanco || volumeLido.startsWith(volumeBanco)) {
                         linhaEncontrada = registro;
                         break;
                     }
                 }
 
-                // 3. MOSTRA O CLIENTE NA TELA
+                // 7. MOSTRA O CLIENTE NA TELA
                 if (clienteDetectado && clienteDetectado !== 'default') {
                     clienteInfo.classList.remove('hidden');
                     displayCliente.textContent = `${clienteDetectado} (detectado automaticamente)`;
@@ -408,23 +491,30 @@
                     clienteInfo.classList.add('hidden');
                 }
 
-                if (linhaEncontrada && nucleoExtraido) {
+                // 8. RESULTADO
+                if (linhaEncontrada) {
+                    // INCREMENTA O CONTADOR
+                    volumesConferidos[nrLida]++;
+                    
+                    // ATUALIZA O PROGRESSO
+                    displayProgress.textContent = `${volumesConferidos[nrLida]} de ${totalVolumes} volumes conferidos`;
+                    
+                    // MOSTRA O NÚCLEO EXTRAÍDO
                     matchInfo.classList.remove('hidden');
                     displayMatch.textContent = `${nucleoExtraido} ✅`;
-                } else {
-                    matchInfo.classList.add('hidden');
-                }
 
-                // 4. RESULTADO
-                if (linhaEncontrada) {
-                    setFeedbackVisual(true, "CONFERIDO COM SUCESSO", null);
+                    // VERIFICA SE CONFERIU TODOS
+                    let mensagem = `CONFERIDO COM SUCESSO (${volumesConferidos[nrLida]}/${totalVolumes})`;
+                    if (volumesConferidos[nrLida] === totalVolumes) {
+                        mensagem = `🎉 TODOS OS ${totalVolumes} VOLUMES CONFERIDOS! 🎉`;
+                        tocarSom('sucesso');
+                        setTimeout(() => tocarSom('sucesso'), 300);
+                    }
+                    
+                    setFeedbackVisual(true, mensagem, null);
                 } else {
-                    const volumesEsperados = registrosDaNR
-                        .map(r => String(r.volume_clie || '').trim())
-                        .filter(v => v !== '');
-
                     setFeedbackVisual(false, "VOLUME NÃO PERTENCE À NR",
-                        `NR: ${nrLida} | Esperado: ${volumesEsperados.join(', ')} | Lido: ${volumeLido}`);
+                        `Código inválido para a NR ${nrLida}`);
                 }
 
             } catch (err) {
@@ -474,8 +564,11 @@
                 errorDetails.classList.add('hidden');
                 clienteInfo.classList.add('hidden');
                 matchInfo.classList.add('hidden');
+                progressInfo.classList.add('hidden');
                 etapa = 1;
                 nrAtual = '';
+                // Reseta o contador para a próxima NR
+                // Mantém apenas para referência
                 timeoutFeedback = null;
             }, tempoEspera);
         }
