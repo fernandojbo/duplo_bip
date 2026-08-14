@@ -95,10 +95,10 @@
         const CONFIG_CLIENTES = {
 
             // =====================================================
-            // CLIENTE: MADEIRA MADEIRA (20 dígitos)
+            // CLIENTE: MOVEIS SAN (20 dígitos)
             // =====================================================
-            'MADEIRA MADEIRA': {
-                nome: 'MADEIRA MADEIRA',
+            'MOVEIS SAN': {
+                nome: 'MOVEIS SAN',
                 tipo: 'nucleo_20_digitos',
                 descricao: 'Código com núcleo de 20 dígitos + sufixo',
                 mascara: {
@@ -109,7 +109,7 @@
                         return codigoBipado;
                     },
                     validar: function(codigoBipado) {
-                        return codigoBipado.length >= 20 && /^\d+$/.test(codigoBipado);
+                        return codigoBipado.length >= 20;
                     }
                 }
             },
@@ -132,23 +132,6 @@
             },
 
             // =====================================================
-            // CLIENTE: MOVEIS S. (fallback com startsWith)
-            // =====================================================
-            'MOVEIS S.': {
-                nome: 'MOVEIS S.',
-                tipo: 'nucleo_variavel',
-                descricao: 'Código com núcleo variável',
-                mascara: {
-                    extracao: function(codigoBipado) {
-                        return codigoBipado;
-                    },
-                    validar: function(codigoBipado) {
-                        return codigoBipado.length >= 10;
-                    }
-                }
-            },
-
-            // =====================================================
             // CONFIGURAÇÃO PADRÃO (Fallback)
             // =====================================================
             'default': {
@@ -165,6 +148,27 @@
                 }
             }
         };
+
+
+        /* ==========================================================
+           DETECÇÃO AUTOMÁTICA DE CLIENTE PELO VOLUME_CLIE
+           ========================================================== */
+
+        function detectarClientePorVolume(volumeCadastrado) {
+            const vol = String(volumeCadastrado).trim();
+            
+            // MOVEIS SAN: 20 dígitos, começa com 87845
+            if (vol.length === 20 && vol.startsWith('87845')) {
+                return 'MOVEIS SAN';
+            }
+            
+            // LOJA ELECT: 10 dígitos, começa com 822
+            if (vol.length === 10 && vol.startsWith('822')) {
+                return 'LOJA ELECT';
+            }
+            
+            return 'default';
+        }
 
 
         /* ==========================================================
@@ -305,7 +309,7 @@
         });
 
         /* ==========================================================
-           VALIDAÇÃO NO SUPABASE - COM MÁSCARAS POR CLIENTE
+           VALIDAÇÃO NO SUPABASE
            ========================================================== */
 
         async function validarNoSupabase(nr, volume) {
@@ -321,7 +325,6 @@
             const volumeLido = String(volume).trim();
 
             try {
-                // 1. BUSCA OS REGISTROS DA NR
                 const { data: registrosDaNR, error } = await supabaseClient
                     .from('conferencia')
                     .select('*')
@@ -329,52 +332,37 @@
 
                 if (error) throw error;
 
-                // 2. VERIFICA SE A NR EXISTE
                 if (!registrosDaNR || registrosDaNR.length === 0) {
                     setFeedbackVisual(false, "NR NÃO ENCONTRADA", `A NR ${nrLida} não existe na base.`);
                     return;
                 }
 
-                // 3. PROCURA O VOLUME COM AS REGRAS DO CLIENTE
                 let linhaEncontrada = null;
-                let clienteNome = '';
+                let clienteDetectado = '';
                 let nucleoExtraido = '';
-                let volumeBancoMatch = '';
 
                 for (const registro of registrosDaNR) {
                     const volumeBanco = String(registro.volume_clie || '').trim();
                     
-                    // Pega o nome do cliente (pode vir do banco)
-                    const nomeCliente = registro.remetente || registro.cliente || 'default';
-                    clienteNome = nomeCliente;
-
-                    // Busca a configuração do cliente
-                    const config = CONFIG_CLIENTES[nomeCliente] || CONFIG_CLIENTES['default'];
-                    
-                    // APLICA A MÁSCARA: extrai o núcleo do código bipado
+                    clienteDetectado = detectarClientePorVolume(volumeBanco);
+                    const config = CONFIG_CLIENTES[clienteDetectado] || CONFIG_CLIENTES['default'];
                     nucleoExtraido = config.mascara.extracao(volumeLido);
                     
-                    console.log(`🔍 Cliente: ${nomeCliente}`, {
+                    console.log(`🔍 Cliente: ${clienteDetectado}`, {
                         volumeBanco: volumeBanco,
                         volumeLido: volumeLido,
-                        nucleoExtraido: nucleoExtraido,
-                        config: config
+                        nucleoExtraido: nucleoExtraido
                     });
 
-                    // VALIDAÇÃO: 
-                    // 1. O núcleo extraído é igual ao cadastrado?
-                    // 2. Ou o lido começa com o cadastrado (fallback)?
                     if (nucleoExtraido === volumeBanco || volumeLido.startsWith(volumeBanco)) {
                         linhaEncontrada = registro;
-                        volumeBancoMatch = volumeBanco;
                         break;
                     }
                 }
 
-                // 4. MOSTRA O CLIENTE E O NÚCLEO NA TELA
-                if (clienteNome && clienteNome !== 'default') {
+                if (clienteDetectado && clienteDetectado !== 'default') {
                     clienteInfo.classList.remove('hidden');
-                    displayCliente.textContent = `${clienteNome} (${CONFIG_CLIENTES[clienteNome]?.tipo || 'padrão'})`;
+                    displayCliente.textContent = `${clienteDetectado} (detectado automaticamente)`;
                 }
 
                 if (linhaEncontrada && nucleoExtraido) {
@@ -384,11 +372,9 @@
                     matchInfo.classList.add('hidden');
                 }
 
-                // 5. RESULTADO
                 if (linhaEncontrada) {
                     setFeedbackVisual(true, "CONFERIDO COM SUCESSO", null);
                 } else {
-                    // Mostra os volumes esperados para ajudar o conferente
                     const volumesEsperados = registrosDaNR
                         .map(r => String(r.volume_clie || '').trim())
                         .filter(v => v !== '');
