@@ -165,30 +165,98 @@
 
 
         /* ==========================================================
-           SONS
+           SONS - AJUSTADOS PARA FICAREM MAIS ALTOS E PERCEPTÍVEIS
            ========================================================== */
 
         function tocarSom(tipo) {
             try {
                 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // Cria um oscilador para o tom principal
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
+                
+                // Cria um segundo oscilador para dar mais corpo ao som (harmônico)
+                const osc2 = audioCtx.createOscillator();
+                const gain2 = audioCtx.createGain();
+
                 osc.connect(gain);
                 gain.connect(audioCtx.destination);
+                
+                osc2.connect(gain2);
+                gain2.connect(audioCtx.destination);
+
+                // Define o tipo de onda (sawtooth é mais perceptível que sine)
+                osc.type = 'sawtooth';
+                osc2.type = 'square';
 
                 if (tipo === 'sucesso') {
+                    // Som de sucesso: dois tons ascendentes (bip-bip)
                     osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-                    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                    osc.frequency.setValueAtTime(1100, audioCtx.currentTime + 0.1);
+                    
+                    osc2.frequency.setValueAtTime(1320, audioCtx.currentTime);
+                    osc2.frequency.setValueAtTime(1540, audioCtx.currentTime + 0.1);
+                    
+                    gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+                    
+                    gain2.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                    gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+                    
+                    osc.start(audioCtx.currentTime);
+                    osc.stop(audioCtx.currentTime + 0.25);
+                    
+                    osc2.start(audioCtx.currentTime);
+                    osc2.stop(audioCtx.currentTime + 0.25);
+                    
                 } else if (tipo === 'erro') {
-                    osc.frequency.setValueAtTime(200, audioCtx.currentTime);
-                    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                    // Som de erro: tom grave e intermitente (bip-bip-bip)
+                    osc.frequency.setValueAtTime(180, audioCtx.currentTime);
+                    osc.frequency.setValueAtTime(150, audioCtx.currentTime + 0.15);
+                    osc.frequency.setValueAtTime(180, audioCtx.currentTime + 0.3);
+                    
+                    osc2.frequency.setValueAtTime(120, audioCtx.currentTime);
+                    osc2.frequency.setValueAtTime(100, audioCtx.currentTime + 0.15);
+                    osc2.frequency.setValueAtTime(120, audioCtx.currentTime + 0.3);
+                    
+                    gain.gain.setValueAtTime(0.35, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.45);
+                    
+                    gain2.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                    gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.45);
+                    
+                    osc.start(audioCtx.currentTime);
+                    osc.stop(audioCtx.currentTime + 0.45);
+                    
+                    osc2.start(audioCtx.currentTime);
+                    osc2.stop(audioCtx.currentTime + 0.45);
+                    
                 } else {
-                    osc.frequency.setValueAtTime(440, audioCtx.currentTime);
-                    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                    // Som neutro: tom médio, curto e limpo
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(660, audioCtx.currentTime);
+                    
+                    osc2.type = 'triangle';
+                    osc2.frequency.setValueAtTime(880, audioCtx.currentTime);
+                    
+                    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
+                    
+                    gain2.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                    gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
+                    
+                    osc.start(audioCtx.currentTime);
+                    osc.stop(audioCtx.currentTime + 0.12);
+                    
+                    osc2.start(audioCtx.currentTime);
+                    osc2.stop(audioCtx.currentTime + 0.12);
                 }
-                osc.start();
-                osc.stop(audioCtx.currentTime + 0.15);
-            } catch (e) {}
+
+            } catch (e) {
+                // Silencia erros de áudio para não quebrar a funcionalidade
+                console.log('Erro no áudio:', e);
+            }
         }
 
 
