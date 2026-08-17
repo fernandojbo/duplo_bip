@@ -140,16 +140,16 @@
         });
 
         // ==========================================================
-        // FUNÇÃO PARA IMPORTAR PARA O SUPABASE
+        // FUNÇÃO PARA IMPORTAR PARA O SUPABASE (SEM onConflict)
         // ==========================================================
         async function importarDados(data, status, btn) {
             try {
                 console.log('📤 Enviando para Supabase:', data);
 
-                // Verifica se a tabela existe e insere
+                // Usa insert() em vez de upsert() para evitar erro de constraint
                 const { data: resultado, error } = await window.supabaseClient
                     .from('conferencia')
-                    .upsert(data, { onConflict: 'nr' });
+                    .insert(data);
 
                 if (error) {
                     console.error('❌ Erro do Supabase:', error);
