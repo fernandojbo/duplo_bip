@@ -5,6 +5,8 @@
     <title>Importação de Conferência - FreteOnX</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <!-- Biblioteca para ler arquivos XLS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script type="module">
         import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
         window.supabaseClient = createClient('https://fqrfknyludtvqaaajjoc.supabase.co', 'sb_publishable_fkC9WhreuFmhmbVRCw6Isw_rftuBACx');
@@ -15,13 +17,13 @@
     <div class="bg-slate-800 p-8 rounded-2xl shadow-xl w-full max-w-lg border border-slate-700">
         <h2 class="text-2xl font-bold mb-2 text-white">Importar Dados</h2>
         <p class="text-slate-400 text-sm mb-6">
-            O arquivo CSV deve conter as colunas: <code class="bg-slate-900 px-1 rounded">NR, NF, VOLUME_CLIE</code>.
+            O arquivo CSV ou XLS deve conter as colunas: <code class="bg-slate-900 px-1 rounded">NR, NF, VOLUME_CLIE</code>.
         </p>
 
         <div class="border-2 border-dashed border-slate-600 rounded-xl p-8 text-center hover:border-amber-500 transition-colors">
-            <input type="file" id="csvFile" accept=".csv" class="hidden">
-            <label for="csvFile" class="cursor-pointer">
-                <span class="block text-amber-400 font-bold mb-2">Clique para selecionar CSV</span>
+            <input type="file" id="fileInput" accept=".csv,.xls" class="hidden">
+            <label for="fileInput" class="cursor-pointer">
+                <span class="block text-amber-400 font-bold mb-2">Clique para selecionar CSV ou XLS</span>
                 <span id="fileName" class="text-xs text-slate-500">Nenhum arquivo escolhido</span>
             </label>
         </div>
@@ -34,12 +36,12 @@
     </div>
 
     <script>
-        document.getElementById('csvFile').addEventListener('change', (e) => {
+        document.getElementById('fileInput').addEventListener('change', (e) => {
             document.getElementById('fileName').textContent = e.target.files[0]?.name || 'Nenhum arquivo';
         });
 
         document.getElementById('btnImportar').addEventListener('click', () => {
-            const file = document.getElementById('csvFile').files[0];
+            const file = document.getElementById('fileInput').files[0];
             if (!file) return alert('Selecione um arquivo!');
             
             const btn = document.getElementById('btnImportar');
@@ -48,46 +50,85 @@
             status.textContent = "Processando e limpando dados...";
             status.className = "mt-4 text-center text-sm font-semibold text-slate-400";
 
-            Papa.parse(file, {
-                header: true,
-                skipEmptyLines: true,
-                complete: async (results) => {
-                    // Mapeamento com limpeza profunda de caracteres invisíveis e quebras de linha
-                    const data = results.data
-                        .map(row => {
-                            // Função para remover quebras de linha, espaços extras e caracteres ocultos
-                            const limpaStr = (val) => String(val || '').replace(/[^0-9A-Za-z]/g, '').trim();
-                            
-                            return {
-                                nr: limpaStr(row.NR || row.nr),
-                                nf: limpaStr(row.NF || row.nf),
-                                volume_clie: limpaStr(row.VOLUME_CLIE || row.volume_clie)
-                            };
-                        })
-                        .filter(row => row.volume_clie !== '' && row.nr !== ''); // Filtra linhas inválidas
+            const limpaStr = (val) => String(val || '').replace(/[^0-9A-Za-z]/g, '').trim();
 
-                    if (data.length === 0) {
-                        status.textContent = "❌ Erro: Nenhuma linha válida encontrada no CSV.";
-                        status.className = "mt-4 text-center text-red-400 font-semibold";
-                        btn.disabled = false;
-                        return;
-                    }
+            // Verifica se é XLS (pela extensão ou tipo MIME)
+            const isXLS = file.name.endsWith('.xls') || file.type === 'application/vnd.ms-excel';
 
+            if (isXLS) {
+                // === LEITURA DE ARQUIVO XLS ===
+                const reader = new FileReader();
+                reader.onload = function(e) {
                     try {
-                        const { error } = await window.supabaseClient.from('conferencia').upsert(data);
-                        if (error) throw error;
-                        
-                        status.textContent = "✅ Importação concluída com sucesso!";
-                        status.className = "mt-4 text-center text-green-400 font-semibold";
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                        const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+
+                        const parsedData = jsonData
+                            .map(row => ({
+                                nr: limpaStr(row.NR || row.nr || ''),
+                                nf: limpaStr(row.NF || row.nf || ''),
+                                volume_clie: limpaStr(row.VOLUME_CLIE || row.volume_clie || '')
+                            }))
+                            .filter(row => row.volume_clie !== '' && row.nr !== '');
+
+                        if (parsedData.length === 0) {
+                            status.textContent = "❌ Erro: Nenhuma linha válida encontrada no arquivo.";
+                            status.className = "mt-4 text-center text-red-400 font-semibold";
+                            btn.disabled = false;
+                            return;
+                        }
+
+                        importarDados(parsedData, status, btn);
                     } catch (err) {
-                        status.textContent = "❌ Erro ao importar: " + err.message;
+                        status.textContent = "❌ Erro ao ler arquivo XLS: " + err.message;
                         status.className = "mt-4 text-center text-red-400 font-semibold";
-                    } finally {
                         btn.disabled = false;
                     }
-                }
-            });
+                };
+                reader.readAsArrayBuffer(file);
+            } else {
+                // === LEITURA DE ARQUIVO CSV (PapaParse) ===
+                Papa.parse(file, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: async (results) => {
+                        const parsedData = results.data
+                            .map(row => ({
+                                nr: limpaStr(row.NR || row.nr || ''),
+                                nf: limpaStr(row.NF || row.nf || ''),
+                                volume_clie: limpaStr(row.VOLUME_CLIE || row.volume_clie || '')
+                            }))
+                            .filter(row => row.volume_clie !== '' && row.nr !== '');
+
+                        if (parsedData.length === 0) {
+                            status.textContent = "❌ Erro: Nenhuma linha válida encontrada no arquivo.";
+                            status.className = "mt-4 text-center text-red-400 font-semibold";
+                            btn.disabled = false;
+                            return;
+                        }
+
+                        await importarDados(parsedData, status, btn);
+                    }
+                });
+            }
         });
+
+        async function importarDados(data, status, btn) {
+            try {
+                const { error } = await window.supabaseClient.from('conferencia').upsert(data);
+                if (error) throw error;
+                
+                status.textContent = `✅ Importação concluída com sucesso! (${data.length} registros)`;
+                status.className = "mt-4 text-center text-green-400 font-semibold";
+            } catch (err) {
+                status.textContent = "❌ Erro ao importar: " + err.message;
+                status.className = "mt-4 text-center text-red-400 font-semibold";
+            } finally {
+                btn.disabled = false;
+            }
+        }
     </script>
 </body>
 </html>
