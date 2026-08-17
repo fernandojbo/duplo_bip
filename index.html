@@ -27,6 +27,8 @@
 
     <!-- Área Principal -->
     <main class="flex-1 flex flex-col items-center justify-center p-6 text-center">
+
+        <!-- STATUS BOX -->
         <div id="status-box"
              class="w-full max-w-md p-8 rounded-2xl bg-slate-800 shadow-2xl border border-slate-700 transition-all">
 
@@ -49,18 +51,13 @@
                     <span id="display-volume" class="text-xl font-mono font-bold text-amber-400">-</span>
                 </div>
 
-                <div id="progress-info" class="hidden mt-2 p-2 bg-purple-900/50 border border-purple-500 rounded-lg">
-                    <span class="text-xs text-purple-300 block font-bold">📊 PROGRESSO:</span>
-                    <span id="display-progress" class="text-sm font-mono text-white">-</span>
-                </div>
-
                 <div id="cliente-info" class="hidden mt-2 p-2 bg-blue-900/50 border border-blue-500 rounded-lg">
-                    <span class="text-xs text-blue-300 block font-bold">📋 CLIENTE DETECTADO:</span>
+                    <span class="text-xs text-blue-300 block font-bold">📋 CLIENTE:</span>
                     <span id="display-cliente" class="text-sm font-mono text-white">-</span>
                 </div>
 
                 <div id="match-info" class="hidden mt-2 p-2 bg-green-900/50 border border-green-500 rounded-lg">
-                    <span class="text-xs text-green-300 block font-bold">✅ NÚCLEO EXTRAÍDO:</span>
+                    <span class="text-xs text-green-300 block font-bold">✅ VOLUME CLIE ENCONTRADO:</span>
                     <span id="display-match" class="text-sm font-mono text-white">-</span>
                 </div>
 
@@ -93,153 +90,6 @@
         const SUPABASE_URL = 'https://fqrfknyludtvqaaajjoc.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_fkC9WhreuFmhmbVRCw6Isw_rftuBACx';
 
-        /* ==========================================================
-           CONFIGURAÇÃO DE CLIENTES - MÁSCARAS
-           ========================================================== */
-
-        const CONFIG_CLIENTES = {
-
-            // =====================================================
-            // CLIENTE: MOVEIS SAN (20 dígitos)
-            // =====================================================
-            'MOVEIS SAN': {
-                nome: 'MOVEIS SAN',
-                tipo: 'nucleo_20_digitos',
-                descricao: 'Código com núcleo de 20 dígitos + sufixo de 8 dígitos',
-                mascara: {
-                    extracao: function(codigoBipado) {
-                        if (codigoBipado.length >= 20) {
-                            return codigoBipado.substring(0, 20);
-                        }
-                        return codigoBipado;
-                    },
-                    validar: function(codigoBipado) {
-                        return codigoBipado.length >= 20;
-                    }
-                }
-            },
-
-            // =====================================================
-            // CLIENTE: MADEIRA MADEIRA (20 dígitos)
-            // =====================================================
-            'MADEIRA MADEIRA': {
-                nome: 'MADEIRA MADEIRA',
-                tipo: 'nucleo_20_digitos',
-                descricao: 'Código com núcleo de 20 dígitos + sufixo',
-                mascara: {
-                    extracao: function(codigoBipado) {
-                        if (codigoBipado.length >= 20) {
-                            return codigoBipado.substring(0, 20);
-                        }
-                        return codigoBipado;
-                    },
-                    validar: function(codigoBipado) {
-                        return codigoBipado.length >= 20;
-                    }
-                }
-            },
-
-            // =====================================================
-            // CLIENTE: LOJA ELECT (10 dígitos)
-            // =====================================================
-            'LOJA ELECT': {
-                nome: 'LOJA ELECT',
-                tipo: 'nucleo_10_digitos',
-                descricao: 'Código numérico com núcleo de 10 dígitos',
-                mascara: {
-                    extracao: function(codigoBipado) {
-                        return codigoBipado.substring(0, 10);
-                    },
-                    validar: function(codigoBipado) {
-                        return codigoBipado.length >= 10 && /^\d+$/.test(codigoBipado);
-                    }
-                }
-            },
-
-            // =====================================================
-            // CONFIGURAÇÃO PADRÃO (Fallback)
-            // =====================================================
-            'default': {
-                nome: 'Padrão',
-                tipo: 'padrao',
-                descricao: 'Validação por startsWith',
-                mascara: {
-                    extracao: function(codigoBipado) {
-                        return codigoBipado;
-                    },
-                    validar: function(codigoBipado) {
-                        return codigoBipado.length > 0;
-                    }
-                }
-            }
-        };
-
-
-        /* ==========================================================
-           DETECÇÃO AUTOMÁTICA DE CLIENTE PELO VOLUME_CLIE
-           ========================================================== */
-
-        function detectarClientePorVolume(volumeCadastrado) {
-            const vol = String(volumeCadastrado).trim();
-            
-            // MOVEIS SAN: 20 dígitos, começa com 87845
-            if (vol.length === 20 && vol.startsWith('87845')) {
-                return 'MOVEIS SAN';
-            }
-            
-            // LOJA ELECT: 10 dígitos, começa com 822
-            if (vol.length === 10 && vol.startsWith('822')) {
-                return 'LOJA ELECT';
-            }
-            
-            // OUTROS: se tiver 20 dígitos, assume MOVEIS SAN
-            if (vol.length === 20) {
-                return 'MOVEIS SAN';
-            }
-            
-            return 'default';
-        }
-
-
-        /* ==========================================================
-           FUNÇÃO PARA EXTRAIR O NÚMERO DO VOLUME DO CÓDIGO BIPADO
-           ========================================================== */
-
-        function extrairNumeroVolume(codigoBipado) {
-            // Tenta extrair o número do volume do final do código
-            // Exemplo: 8784536800013900009565501010 → 1
-            // Exemplo: 8784536800013900009565501020 → 2
-            
-            // Procura por ...1010, ...1020, ...1030 no final
-            const match = codigoBipado.match(/(\d{3})(\d{2})$/);
-            if (match) {
-                // Pega os últimos 5 dígitos: 01010 → 1
-                const ultimos5 = match[1] + match[2];
-                const numero = parseInt(ultimos5.substring(3, 5));
-                
-                if (numero % 10 === 0) {
-                    return numero / 10; // 10 → 1, 20 → 2, 30 → 3
-                }
-            }
-            
-            // Tenta extrair do formato: ...-001, .../001
-            const match2 = codigoBipado.match(/[-/](\d{3})$/);
-            if (match2) {
-                return parseInt(match2[1]);
-            }
-            
-            // Se não conseguir extrair, retorna null
-            return null;
-        }
-
-
-        /* ==========================================================
-           CONTROLE DE VOLUMES CONFERIDOS POR NR
-           ========================================================== */
-
-        const volumesConferidos = {}; // { 'NR': quantidade }
-        const totalVolumesPorNR = {}; // { 'NR': total }
-
 
         /* ==========================================================
            VARIÁVEIS GLOBAIS
@@ -250,6 +100,7 @@
         let nrAtual = '';
         let processando = false;
         let timeoutFeedback = null;
+
 
         /* ==========================================================
            ELEMENTOS DA INTERFACE
@@ -269,14 +120,7 @@
         const displayCliente = document.getElementById('display-cliente');
         const matchInfo = document.getElementById('match-info');
         const displayMatch = document.getElementById('display-match');
-        const progressInfo = document.getElementById('progress-info');
-        const displayProgress = document.getElementById('display-progress');
 
-        /* ==========================================================
-           MANTÉM FOCO NO LEITOR
-           ========================================================== */
-
-        document.addEventListener('click', () => inputField.focus());
 
         /* ==========================================================
            INICIALIZAÇÃO SUPABASE
@@ -319,6 +163,7 @@
             }
         }
 
+
         /* ==========================================================
            SONS
            ========================================================== */
@@ -346,6 +191,14 @@
             } catch (e) {}
         }
 
+
+        /* ==========================================================
+           MANTÉM FOCO NO LEITOR
+           ========================================================== */
+
+        document.addEventListener('click', () => inputField.focus());
+
+
         /* ==========================================================
            LEITURA DO CÓDIGO DE BARRAS
            ========================================================== */
@@ -359,22 +212,21 @@
                     if (!codigoLido) { processando = false; return; }
 
                     if (etapa === 1) {
+                        // ETAPA 1: LEITURA DA NR
                         nrAtual = codigoLido;
                         displayNr.textContent = nrAtual;
                         displayVolume.textContent = '-';
                         errorDetails.classList.add('hidden');
                         clienteInfo.classList.add('hidden');
                         matchInfo.classList.add('hidden');
-                        progressInfo.classList.add('hidden');
-                        
-                        // Busca o total de volumes para esta NR
-                        await buscarTotalVolumes(nrAtual);
                         
                         etapa = 2;
                         instructionTitle.textContent = "Aguardando Volume...";
                         instructionSub.innerHTML = "Bipe a etiqueta de <strong>Volume</strong>";
                         tocarSom('neutro');
+                        
                     } else if (etapa === 2) {
+                        // ETAPA 2: LEITURA DO VOLUME
                         const volumeLido = codigoLido;
                         displayVolume.textContent = volumeLido;
                         await validarNoSupabase(nrAtual, volumeLido);
@@ -385,29 +237,9 @@
             }
         });
 
-        /* ==========================================================
-           BUSCAR TOTAL DE VOLUMES DA NR
-           ========================================================== */
-
-        async function buscarTotalVolumes(nr) {
-            if (!supabaseClient) return;
-            
-            try {
-                const { data, error } = await supabaseClient
-                    .from('conferencia')
-                    .select('id')
-                    .eq('nr', nr);
-
-                if (!error && data) {
-                    totalVolumesPorNR[nr] = data.length;
-                }
-            } catch (e) {
-                console.error("Erro ao buscar total de volumes:", e);
-            }
-        }
 
         /* ==========================================================
-           VALIDAÇÃO NO SUPABASE - COM CONTROLE DE ORDEM DOS VOLUMES
+           VALIDAÇÃO NO SUPABASE - SIMPLES E DIRETA
            ========================================================== */
 
         async function validarNoSupabase(nr, volume) {
@@ -423,98 +255,48 @@
             const volumeLido = String(volume).trim();
 
             try {
-                // 1. BUSCA OS REGISTROS DA NR
-                const { data: registrosDaNR, error } = await supabaseClient
+                // 1. BUSCA O REGISTRO ESPECÍFICO: NR + volume_clie
+                const { data: registro, error } = await supabaseClient
                     .from('conferencia')
                     .select('*')
-                    .eq('nr', nrLida);
+                    .eq('nr', nrLida)
+                    .eq('volume_clie', volumeLido)
+                    .maybeSingle();
 
                 if (error) throw error;
 
-                if (!registrosDaNR || registrosDaNR.length === 0) {
-                    setFeedbackVisual(false, "NR NÃO ENCONTRADA", `A NR ${nrLida} não existe na base.`);
-                    return;
-                }
-
-                // 2. INICIALIZA O CONTADOR PARA ESTA NR
-                if (!volumesConferidos[nrLida]) {
-                    volumesConferidos[nrLida] = 0;
-                }
-
-                // 3. EXTRAI O NÚMERO DO VOLUME DO CÓDIGO BIPADO
-                const numeroVolume = extrairNumeroVolume(volumeLido);
-                const totalVolumes = registrosDaNR.length;
-                const proximoEsperado = volumesConferidos[nrLida] + 1;
-
-                console.log(`🔍 Volume bipado: ${numeroVolume}`, {
-                    codigoBipado: volumeLido,
-                    numeroVolume: numeroVolume,
-                    proximoEsperado: proximoEsperado,
-                    total: totalVolumes,
-                    jaConferidos: volumesConferidos[nrLida]
-                });
-
-                // 4. MOSTRA O PROGRESSO
-                progressInfo.classList.remove('hidden');
-                displayProgress.textContent = `${volumesConferidos[nrLida]} de ${totalVolumes} volumes conferidos`;
-
-                // 5. VERIFICA SE É O VOLUME ESPERADO
-                if (numeroVolume !== null && numeroVolume !== proximoEsperado) {
-                    setFeedbackVisual(false, "VOLUME FORA DE ORDEM",
-                        `Esperado: ${String(proximoEsperado).padStart(3, '0')}/${String(totalVolumes).padStart(3, '0')} | Bipado: ${String(numeroVolume).padStart(3, '0')}`);
-                    return;
-                }
-
-                // 6. VALIDA O CÓDIGO (extrai o núcleo)
-                let linhaEncontrada = null;
-                let clienteDetectado = '';
-                let nucleoExtraido = '';
-
-                for (const registro of registrosDaNR) {
-                    const volumeBanco = String(registro.volume_clie || '').trim();
+                // 2. VERIFICA SE ENCONTROU
+                if (registro) {
+                    // ✅ ENCONTROU! NR + volume_clie correspondem na mesma linha
                     
-                    clienteDetectado = detectarClientePorVolume(volumeBanco);
-                    const config = CONFIG_CLIENTES[clienteDetectado] || CONFIG_CLIENTES['default'];
-                    nucleoExtraido = config.mascara.extracao(volumeLido);
-                    
-                    if (nucleoExtraido === volumeBanco || volumeLido.startsWith(volumeBanco)) {
-                        linhaEncontrada = registro;
-                        break;
+                    // Mostra o cliente se disponível
+                    if (registro.cliente || registro.remetente) {
+                        clienteInfo.classList.remove('hidden');
+                        displayCliente.textContent = registro.cliente || registro.remetente || 'N/A';
+                    } else {
+                        clienteInfo.classList.add('hidden');
                     }
-                }
 
-                // 7. MOSTRA O CLIENTE NA TELA
-                if (clienteDetectado && clienteDetectado !== 'default') {
-                    clienteInfo.classList.remove('hidden');
-                    displayCliente.textContent = `${clienteDetectado} (detectado automaticamente)`;
-                } else {
-                    clienteInfo.classList.add('hidden');
-                }
-
-                // 8. RESULTADO
-                if (linhaEncontrada) {
-                    // INCREMENTA O CONTADOR
-                    volumesConferidos[nrLida]++;
-                    
-                    // ATUALIZA O PROGRESSO
-                    displayProgress.textContent = `${volumesConferidos[nrLida]} de ${totalVolumes} volumes conferidos`;
-                    
-                    // MOSTRA O NÚCLEO EXTRAÍDO
+                    // Mostra o volume_clie encontrado
                     matchInfo.classList.remove('hidden');
-                    displayMatch.textContent = `${nucleoExtraido} ✅`;
+                    displayMatch.textContent = volumeLido + ' ✅';
 
-                    // VERIFICA SE CONFERIU TODOS
-                    let mensagem = `CONFERIDO COM SUCESSO (${volumesConferidos[nrLida]}/${totalVolumes})`;
-                    if (volumesConferidos[nrLida] === totalVolumes) {
-                        mensagem = `🎉 TODOS OS ${totalVolumes} VOLUMES CONFERIDOS! 🎉`;
-                        tocarSom('sucesso');
-                        setTimeout(() => tocarSom('sucesso'), 300);
-                    }
-                    
-                    setFeedbackVisual(true, mensagem, null);
+                    setFeedbackVisual(true, "CONFERIDO COM SUCESSO", null);
                 } else {
-                    setFeedbackVisual(false, "VOLUME NÃO PERTENCE À NR",
-                        `Código inválido para a NR ${nrLida}`);
+                    // ❌ NÃO ENCONTROU! Verifica se a NR existe
+                    const { data: nrExiste } = await supabaseClient
+                        .from('conferencia')
+                        .select('nr')
+                        .eq('nr', nrLida)
+                        .maybeSingle();
+
+                    if (!nrExiste) {
+                        setFeedbackVisual(false, "NR NÃO ENCONTRADA", 
+                            `A NR ${nrLida} não existe na base.`);
+                    } else {
+                        setFeedbackVisual(false, "VOLUME NÃO PERTENCE À NR",
+                            `O volume ${volumeLido} não está vinculado à NR ${nrLida}.`);
+                    }
                 }
 
             } catch (err) {
@@ -522,6 +304,7 @@
                 setFeedbackVisual(false, "ERRO DE CONSULTA", err.message || "Falha ao buscar dados.");
             }
         }
+
 
         /* ==========================================================
            FEEDBACK VISUAL
@@ -564,11 +347,8 @@
                 errorDetails.classList.add('hidden');
                 clienteInfo.classList.add('hidden');
                 matchInfo.classList.add('hidden');
-                progressInfo.classList.add('hidden');
                 etapa = 1;
                 nrAtual = '';
-                // Reseta o contador para a próxima NR
-                // Mantém apenas para referência
                 timeoutFeedback = null;
             }, tempoEspera);
         }
