@@ -26,10 +26,13 @@
         <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
             <div>
                 <h1 class="text-2xl font-bold text-white">📊 Dashboard de Conferência</h1>
-                <p class="text-slate-400 text-sm">Métricas em tempo real do sistema de duplo bip</p>
+                <p class="text-slate-400 text-sm" id="filtro-status">Métricas em tempo real do sistema de duplo bip</p>
             </div>
             <div class="flex items-center gap-3">
                 <span id="connection-status" class="text-sm text-yellow-400">⏳ Conectando...</span>
+                <button id="btn-limpar-filtro" class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors hidden">
+                    🗑️ Limpar Filtro
+                </button>
                 <button id="btn-atualizar" class="bg-amber-600 hover:bg-amber-700 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
                     🔄 Atualizar
                 </button>
@@ -81,14 +84,15 @@
 
             <!-- Gráfico: Top Conferentes -->
             <div class="bg-slate-800 rounded-xl p-4 border border-slate-700">
-                <h3 class="text-sm font-semibold text-slate-300 mb-3">🏆 Top Conferentes</h3>
+                <h3 class="text-sm font-semibold text-slate-300 mb-3">🏆 Top Conferentes <span id="filtro-conferente" class="text-xs text-amber-400 ml-2"></span></h3>
                 <div class="relative" style="height: 180px;">
                     <canvas id="chart-conferentes"></canvas>
                 </div>
+                <p class="text-xs text-slate-500 mt-2 text-center">👆 Clique em um conferente para filtrar</p>
             </div>
         </section>
 
-        <!-- Segunda Linha: Últimas Divergências (ocupa 100%) -->
+        <!-- Segunda Linha: Últimas Divergências -->
         <section class="grid grid-cols-1 gap-4">
             <div class="bg-slate-800 rounded-xl p-4 border border-slate-700">
                 <div class="flex justify-between items-center mb-3">
@@ -140,10 +144,8 @@
 
         let supabaseClient = null;
         let charts = {};
-        let dadosCache = {
-            logs: [],
-            totais: { sucesso: 0, erro: 0, total: 0 }
-        };
+        let dadosCompletos = [];
+        let filtroConferente = null; // null = todos, ou nome do conferente
 
 
         // ==========================================================
@@ -165,6 +167,15 @@
                 carregarDados();
             }
         }, 2000);
+
+        // Botão limpar filtro
+        document.getElementById('btn-limpar-filtro').addEventListener('click', () => {
+            filtroConferente = null;
+            document.getElementById('btn-limpar-filtro').classList.add('hidden');
+            document.getElementById('filtro-conferente').textContent = '';
+            document.getElementById('filtro-status').textContent = 'Métricas em tempo real do sistema de duplo bip';
+            carregarDados();
+        });
 
 
         // ==========================================================
@@ -192,10 +203,24 @@
                     return;
                 }
 
+                dadosCompletos = logs;
                 console.log(`📊 ${logs.length} registros carregados`);
-                dadosCache.logs = logs;
-                processarDados(logs);
-                atualizarGraficos(logs);
+
+                // Aplica filtro se houver
+                let dadosFiltrados = logs;
+                if (filtroConferente) {
+                    dadosFiltrados = logs.filter(log => log.conferente === filtroConferente);
+                    document.getElementById('filtro-conferente').textContent = `🎯 ${filtroConferente}`;
+                    document.getElementById('filtro-status').textContent = `📋 Filtrando por: ${filtroConferente}`;
+                    document.getElementById('btn-limpar-filtro').classList.remove('hidden');
+                } else {
+                    document.getElementById('filtro-conferente').textContent = '';
+                    document.getElementById('filtro-status').textContent = 'Métricas em tempo real do sistema de duplo bip';
+                    document.getElementById('btn-limpar-filtro').classList.add('hidden');
+                }
+
+                processarDados(dadosFiltrados);
+                atualizarGraficos(dadosFiltrados);
 
             } catch (err) {
                 console.error('❌ Erro ao carregar dados:', err);
@@ -264,33 +289,38 @@
                 }
             });
 
-            dadosCache.totais = { sucesso, erro, total: sucesso + erro };
+            const totais = { sucesso, erro, total: sucesso + erro };
 
-            document.getElementById('total-conferido').textContent = dadosCache.totais.total;
+            document.getElementById('total-conferido').textContent = totais.total;
             document.getElementById('total-erros').textContent = erro;
             document.getElementById('ultima-hora').textContent = ultimaHora;
             document.getElementById('erros-ultima-hora').textContent = errosUltimaHora;
 
-            const taxa = dadosCache.totais.total > 0 ? Math.round((sucesso / dadosCache.totais.total) * 100) : 0;
+            const taxa = totais.total > 0 ? Math.round((sucesso / totais.total) * 100) : 0;
             document.getElementById('taxa-sucesso').textContent = taxa + '%';
             document.getElementById('barra-sucesso').style.width = taxa + '%';
 
-            // Atualiza lista de divergências (apenas erros)
+            // Atualiza lista de divergências
             const ultimasDivergencias = divergencias.slice(0, 20);
             atualizarUltimasDivergencias(ultimasDivergencias);
 
             const dataAtual = new Date().toLocaleString('pt-BR');
+            const filtroTexto = filtroConferente ? ` | 🎯 Filtrando: ${filtroConferente}` : '';
             document.getElementById('footer-info').textContent = 
-                `📊 ${dadosCache.totais.total} registros | ✅ ${sucesso} sucessos | ❌ ${erro} erros | Última atualização: ${dataAtual}`;
+                `📊 ${totais.total} registros | ✅ ${sucesso} sucessos | ❌ ${erro} erros | Última atualização: ${dataAtual}${filtroTexto}`;
 
-            dadosCache.conferentes = conferentes;
-            dadosCache.horas = horas;
-            dadosCache.divergencias = divergencias;
+            // Armazena para os gráficos
+            window.dadosProcessados = {
+                conferentes: conferentes,
+                horas: horas,
+                divergencias: divergencias,
+                totais: totais
+            };
         }
 
 
         // ==========================================================
-        // ATUALIZAR ÚLTIMAS DIVERGÊNCIAS (APENAS ERROS)
+        // ATUALIZAR ÚLTIMAS DIVERGÊNCIAS
         // ==========================================================
 
         function atualizarUltimasDivergencias(divergencias) {
@@ -331,8 +361,10 @@
         // ==========================================================
 
         function atualizarGraficos(logs) {
+            const dados = window.dadosProcessados || { conferentes: {}, horas: {} };
+
             // 1. Gráfico de Horas
-            const horas = dadosCache.horas || {};
+            const horas = dados.horas || {};
             const labelsHoras = Object.keys(horas).sort();
             const dadosHoras = labelsHoras.map(h => horas[h] || 0);
 
@@ -367,17 +399,35 @@
                 });
             }
 
-            // 2. Gráfico de Conferentes
-            const conferentes = dadosCache.conferentes || {};
+            // 2. Gráfico de Conferentes (com click interativo)
+            const conferentes = dados.conferentes || {};
             const topConferentes = Object.entries(conferentes)
                 .sort((a, b) => b[1] - a[1])
                 .slice(0, 8);
             const labelsConf = topConferentes.map(c => c[0]);
             const dadosConf = topConferentes.map(c => c[1]);
 
+            // Destacar o conferente selecionado
+            const cores = labelsConf.map(nome => {
+                if (filtroConferente && nome === filtroConferente) {
+                    return 'rgba(251, 191, 36, 0.9)'; // Amarelo dourado
+                }
+                return [
+                    'rgba(251, 191, 36, 0.8)',
+                    'rgba(52, 211, 153, 0.8)',
+                    'rgba(96, 165, 250, 0.8)',
+                    'rgba(248, 113, 113, 0.8)',
+                    'rgba(167, 139, 250, 0.8)',
+                    'rgba(251, 146, 60, 0.8)',
+                    'rgba(45, 212, 191, 0.8)',
+                    'rgba(244, 63, 94, 0.8)'
+                ][labelsConf.indexOf(nome)] || 'rgba(148, 163, 184, 0.8)';
+            });
+
             if (charts.conferentes) {
                 charts.conferentes.data.labels = labelsConf.length > 0 ? labelsConf : ['Sem dados'];
                 charts.conferentes.data.datasets[0].data = dadosConf.length > 0 ? dadosConf : [1];
+                charts.conferentes.data.datasets[0].backgroundColor = cores;
                 charts.conferentes.update();
             } else {
                 const ctx = document.getElementById('chart-conferentes').getContext('2d');
@@ -387,16 +437,7 @@
                         labels: labelsConf.length > 0 ? labelsConf : ['Sem dados'],
                         datasets: [{
                             data: dadosConf.length > 0 ? dadosConf : [1],
-                            backgroundColor: [
-                                'rgba(251, 191, 36, 0.8)',
-                                'rgba(52, 211, 153, 0.8)',
-                                'rgba(96, 165, 250, 0.8)',
-                                'rgba(248, 113, 113, 0.8)',
-                                'rgba(167, 139, 250, 0.8)',
-                                'rgba(251, 146, 60, 0.8)',
-                                'rgba(45, 212, 191, 0.8)',
-                                'rgba(244, 63, 94, 0.8)'
-                            ],
+                            backgroundColor: cores.length > 0 ? cores : ['rgba(148, 163, 184, 0.8)'],
                             borderWidth: 2,
                             borderColor: '#1e293b'
                         }]
@@ -407,12 +448,53 @@
                         plugins: {
                             legend: {
                                 position: 'right',
-                                labels: { color: '#cbd5e1', font: { size: 9 } }
+                                labels: { 
+                                    color: '#cbd5e1', 
+                                    font: { size: 9 },
+                                    onClick: function(e, legendItem) {
+                                        // Filtra ao clicar no nome do conferente na legenda
+                                        const nome = legendItem.text;
+                                        if (nome && nome !== 'Sem dados') {
+                                            aplicarFiltroConferente(nome);
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        // Click no gráfico (nas fatias)
+                        onClick: function(e, elements) {
+                            if (elements.length > 0) {
+                                const index = elements[0].index;
+                                const nome = this.data.labels[index];
+                                if (nome && nome !== 'Sem dados') {
+                                    aplicarFiltroConferente(nome);
+                                }
                             }
                         }
                     }
                 });
             }
+        }
+
+
+        // ==========================================================
+        // FUNÇÃO PARA APLICAR FILTRO POR CONFERENTE
+        // ==========================================================
+
+        function aplicarFiltroConferente(nome) {
+            if (filtroConferente === nome) {
+                // Se já está filtrando por este conferente, limpa o filtro
+                filtroConferente = null;
+                document.getElementById('btn-limpar-filtro').classList.add('hidden');
+                document.getElementById('filtro-conferente').textContent = '';
+                document.getElementById('filtro-status').textContent = 'Métricas em tempo real do sistema de duplo bip';
+            } else {
+                filtroConferente = nome;
+                document.getElementById('btn-limpar-filtro').classList.remove('hidden');
+                document.getElementById('filtro-conferente').textContent = `🎯 ${nome}`;
+                document.getElementById('filtro-status').textContent = `📋 Filtrando por: ${nome}`;
+            }
+            carregarDados();
         }
 
 
@@ -423,7 +505,8 @@
         document.getElementById('btn-atualizar').addEventListener('click', carregarDados);
         setInterval(carregarDados, 30000);
 
-        console.log('📊 Dashboard iniciado');
+        console.log('📊 Dashboard interativo iniciado');
+        console.log('💡 Clique em um conferente no gráfico ou na legenda para filtrar');
     </script>
 
 </body>
