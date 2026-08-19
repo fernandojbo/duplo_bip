@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin </title>
+    <title>Admin</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
 </head>
@@ -37,6 +37,11 @@
             <a href="cadastro-usuarios.html" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-700 hover:text-white transition-colors">
                 <i class="fas fa-users w-5 text-center"></i>
                 <span>Usuários</span>
+            </a>
+            <!-- NOVO: Limpar Dados (apenas admin) -->
+            <a href="limpar-dados.html" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-700 hover:text-white transition-colors">
+                <i class="fas fa-trash-alt w-5 text-center text-red-400"></i>
+                <span class="text-red-400">Limpar Dados</span>
             </a>
         </nav>
 
@@ -159,5 +164,6 @@
 
         console.log('✅ Admin layout carregado');
     </script>
+
 </body>
 </html>
