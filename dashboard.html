@@ -88,21 +88,15 @@
             </div>
         </section>
 
-        <!-- Segunda Linha de Gráficos -->
-        <section class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <!-- Gráfico: Divergências por NR -->
+        <!-- Segunda Linha: Últimas Divergências (ocupa 100%) -->
+        <section class="grid grid-cols-1 gap-4">
             <div class="bg-slate-800 rounded-xl p-4 border border-slate-700">
-                <h3 class="text-sm font-semibold text-slate-300 mb-3">⚠️ Divergências por NR</h3>
-                <div class="relative" style="height: 180px;">
-                    <canvas id="chart-clientes"></canvas>
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="text-sm font-semibold text-slate-300">🚨 Últimas Divergências</h3>
+                    <span class="text-xs text-slate-500" id="total-divergencias">Total: 0</span>
                 </div>
-            </div>
-
-            <!-- Status das Últimas Conferências -->
-            <div class="bg-slate-800 rounded-xl p-4 border border-slate-700">
-                <h3 class="text-sm font-semibold text-slate-300 mb-3">🕒 Últimas Conferências</h3>
-                <div id="ultimas-conferencias" class="space-y-1.5 max-h-[180px] overflow-y-auto">
-                    <div class="text-center text-slate-500 text-sm py-4">Nenhuma conferência registrada</div>
+                <div id="ultimas-divergencias" class="space-y-1.5 max-h-[280px] overflow-y-auto">
+                    <div class="text-center text-slate-500 text-sm py-4">Nenhuma divergência registrada</div>
                 </div>
             </div>
         </section>
@@ -218,8 +212,8 @@
             document.getElementById('ultima-hora').textContent = '0';
             document.getElementById('erros-ultima-hora').textContent = '0';
             
-            const container = document.getElementById('ultimas-conferencias');
-            container.innerHTML = '<div class="text-center text-slate-500 text-sm py-4">Nenhuma conferência registrada</div>';
+            const container = document.getElementById('ultimas-divergencias');
+            container.innerHTML = '<div class="text-center text-slate-500 text-sm py-4">Nenhuma divergência registrada</div>';
             
             if (charts.horas) {
                 charts.horas.data.labels = ['Sem dados'];
@@ -231,11 +225,6 @@
                 charts.conferentes.data.datasets[0].data = [1];
                 charts.conferentes.update();
             }
-            if (charts.clientes) {
-                charts.clientes.data.labels = ['Sem dados'];
-                charts.clientes.data.datasets[0].data = [0];
-                charts.clientes.update();
-            }
         }
 
 
@@ -245,20 +234,20 @@
 
         function processarDados(logs) {
             let sucesso = 0, erro = 0;
-            let conferentes = {}, clientes = {}, horas = {};
+            let conferentes = {}, horas = {};
             let agora = new Date();
             let ultimaHora = 0, errosUltimaHora = 0;
+            let divergencias = [];
 
             logs.forEach(log => {
                 if (log.status === 'sucesso') sucesso++;
-                else if (log.status === 'erro') erro++;
+                else if (log.status === 'erro') {
+                    erro++;
+                    divergencias.push(log);
+                }
 
                 if (log.conferente) {
                     conferentes[log.conferente] = (conferentes[log.conferente] || 0) + 1;
-                }
-
-                if (log.status === 'erro' && log.nr) {
-                    clientes[log.nr] = (clientes[log.nr] || 0) + 1;
                 }
 
                 if (log.created_at) {
@@ -286,41 +275,49 @@
             document.getElementById('taxa-sucesso').textContent = taxa + '%';
             document.getElementById('barra-sucesso').style.width = taxa + '%';
 
-            const ultimas = logs.slice(0, 10);
-            atualizarUltimasConferencias(ultimas);
+            // Atualiza lista de divergências (apenas erros)
+            const ultimasDivergencias = divergencias.slice(0, 20);
+            atualizarUltimasDivergencias(ultimasDivergencias);
 
             const dataAtual = new Date().toLocaleString('pt-BR');
             document.getElementById('footer-info').textContent = 
                 `📊 ${dadosCache.totais.total} registros | ✅ ${sucesso} sucessos | ❌ ${erro} erros | Última atualização: ${dataAtual}`;
 
             dadosCache.conferentes = conferentes;
-            dadosCache.clientes = clientes;
             dadosCache.horas = horas;
+            dadosCache.divergencias = divergencias;
         }
 
 
         // ==========================================================
-        // ATUALIZAR ÚLTIMAS CONFERÊNCIAS (NR COMPLETO)
+        // ATUALIZAR ÚLTIMAS DIVERGÊNCIAS (APENAS ERROS)
         // ==========================================================
 
-        function atualizarUltimasConferencias(ultimas) {
-            const container = document.getElementById('ultimas-conferencias');
+        function atualizarUltimasDivergencias(divergencias) {
+            const container = document.getElementById('ultimas-divergencias');
+            const totalDiv = document.getElementById('total-divergencias');
             
-            if (!ultimas || ultimas.length === 0) {
-                container.innerHTML = '<div class="text-center text-slate-500 text-sm py-4">Nenhuma conferência registrada</div>';
+            if (!divergencias || divergencias.length === 0) {
+                container.innerHTML = '<div class="text-center text-slate-500 text-sm py-4">✅ Nenhuma divergência registrada</div>';
+                totalDiv.textContent = 'Total: 0';
                 return;
             }
 
-            container.innerHTML = ultimas.map(log => {
+            totalDiv.textContent = `Total: ${divergencias.length}`;
+
+            container.innerHTML = divergencias.map(log => {
                 const data = log.created_at ? new Date(log.created_at).toLocaleTimeString('pt-BR') : '-';
-                const status = log.status === 'sucesso' ? '✅ Sucesso' : '❌ Erro';
-                const cor = log.status === 'sucesso' ? 'text-green-400' : 'text-red-400';
                 const conferente = log.conferente || 'Desconhecido';
                 const nr = log.nr || 'N/A';
+                const volume = log.volume_clie || 'N/A';
+                const mensagem = log.mensagem || 'Erro na conferência';
                 return `
-                    <div class="flex justify-between items-center bg-slate-700/30 px-2.5 py-1.5 rounded-lg text-xs gap-2">
-                        <span class="font-mono text-slate-300 text-xs" style="min-width: 120px;">${nr}</span>
-                        <span class="${cor} font-semibold text-xs">${status}</span>
+                    <div class="flex justify-between items-center bg-red-900/20 border-l-4 border-red-500 px-3 py-2 rounded-lg text-xs">
+                        <div class="flex flex-col min-w-[200px]">
+                            <span class="font-mono text-slate-300 text-xs font-bold">${nr}</span>
+                            <span class="font-mono text-slate-400 text-[10px]">${volume}</span>
+                        </div>
+                        <span class="text-red-400 font-semibold text-xs flex-1 text-center">${mensagem}</span>
                         <span class="text-slate-400 text-xs">${conferente}</span>
                         <span class="text-slate-500 text-xs">${data}</span>
                     </div>
@@ -412,45 +409,6 @@
                                 position: 'right',
                                 labels: { color: '#cbd5e1', font: { size: 9 } }
                             }
-                        }
-                    }
-                });
-            }
-
-            // 3. Gráfico de Divergências por Cliente
-            const clientes = dadosCache.clientes || {};
-            const topClientes = Object.entries(clientes)
-                .sort((a, b) => b[1] - a[1])
-                .slice(0, 8);
-            const labelsCli = topClientes.map(c => c[0]);
-            const dadosCli = topClientes.map(c => c[1]);
-
-            if (charts.clientes) {
-                charts.clientes.data.labels = labelsCli.length > 0 ? labelsCli : ['Sem dados'];
-                charts.clientes.data.datasets[0].data = dadosCli.length > 0 ? dadosCli : [0];
-                charts.clientes.update();
-            } else {
-                const ctx = document.getElementById('chart-clientes').getContext('2d');
-                charts.clientes = new Chart(ctx, {
-                    type: 'bar',
-                    data: {
-                        labels: labelsCli.length > 0 ? labelsCli : ['Sem dados'],
-                        datasets: [{
-                            label: 'Divergências',
-                            data: dadosCli.length > 0 ? dadosCli : [0],
-                            backgroundColor: 'rgba(248, 113, 113, 0.7)',
-                            borderColor: 'rgba(248, 113, 113, 1)',
-                            borderWidth: 1,
-                            borderRadius: 4
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { display: false } },
-                        scales: {
-                            y: { beginAtZero: true, ticks: { color: '#94a3b8', stepSize: 1 } },
-                            x: { ticks: { color: '#94a3b8', font: { size: 8 } } }
                         }
                     }
                 });
