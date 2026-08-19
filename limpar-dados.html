@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Limpar Dados </title>
+    <title>Limpar Dados - FreteOnX</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -59,7 +59,7 @@
             <!-- Selecionar Tabela -->
             <div class="mb-4">
                 <label class="block text-sm font-medium text-slate-300 mb-1">Selecione a tabela:</label>
-                <div class="flex gap-4">
+                <div class="flex flex-wrap gap-4">
                     <label class="flex items-center gap-2 text-sm text-slate-300">
                         <input type="radio" name="tabela" value="conferencia" checked class="accent-amber-500">
                         Conferencia
@@ -78,30 +78,43 @@
             <!-- Opções de exclusão -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div>
-                    <label class="block text-sm font-medium text-slate-300 mb-1">Excluir registros mais antigos que:</label>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">Filtrar por período:</label>
                     <select id="dias-filter" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-amber-500">
                         <option value="0">Todos (sem filtro)</option>
-                        <option value="1">1 dia</option>
-                        <option value="7">7 dias</option>
-                        <option value="15">15 dias</option>
-                        <option value="30" selected>30 dias</option>
-                        <option value="60">60 dias</option>
-                        <option value="90">90 dias</option>
-                        <option value="180">180 dias</option>
-                        <option value="365">1 ano</option>
+                        <option value="1">Último 1 dia</option>
+                        <option value="3">Últimos 3 dias</option>
+                        <option value="7" selected>Últimos 7 dias</option>
+                        <option value="15">Últimos 15 dias</option>
+                        <option value="30">Últimos 30 dias</option>
+                        <option value="60">Últimos 60 dias</option>
+                        <option value="90">Últimos 90 dias</option>
+                        <option value="180">Últimos 180 dias</option>
+                        <option value="365">Último 1 ano</option>
                     </select>
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-slate-300 mb-1">Conferente (opcional):</label>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">Conferente (apenas log):</label>
                     <input type="text" id="conferente-filter" 
                            class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-400 focus:outline-none focus:border-amber-500"
                            placeholder="Deixe vazio para todos">
                 </div>
             </div>
 
+            <!-- Informação sobre a data atual -->
+            <div class="mb-4 p-3 bg-slate-700/30 rounded-lg border border-slate-600">
+                <p class="text-xs text-slate-400">
+                    📅 <strong>Data atual (servidor):</strong> 
+                    <span class="text-slate-300" id="data-atual-info">carregando...</span>
+                </p>
+                <p class="text-xs text-slate-400 mt-1">
+                    🔍 <strong>Filtro ativo:</strong> 
+                    <span class="text-slate-300" id="filtro-info">carregando...</span>
+                </p>
+            </div>
+
             <!-- Botões -->
-            <div class="flex flex-col sm:flex-row gap-3 mt-4">
+            <div class="flex flex-wrap gap-3 mt-4">
                 <button id="btn-contar" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">
                     📊 Contar Registros
                 </button>
@@ -174,16 +187,39 @@
 
         window.addEventListener('supabase-ready', () => {
             supabaseClient = window.supabaseClient;
-            document.getElementById('connection-status')?.remove();
             carregarContagens();
+            atualizarInfoData();
         });
 
         setTimeout(() => {
             if (!supabaseClient && window.supabaseClient) {
                 supabaseClient = window.supabaseClient;
                 carregarContagens();
+                atualizarInfoData();
             }
         }, 2000);
+
+
+        // ==========================================================
+        // ATUALIZAR INFORMAÇÃO DE DATA
+        // ==========================================================
+
+        function atualizarInfoData() {
+            const hoje = new Date();
+            document.getElementById('data-atual-info').textContent = hoje.toLocaleString('pt-BR');
+            
+            const dias = parseInt(document.getElementById('dias-filter').value);
+            if (dias > 0) {
+                const dataLimite = new Date();
+                dataLimite.setDate(dataLimite.getDate() - dias);
+                document.getElementById('filtro-info').textContent = `Registros dos últimos ${dias} dias (a partir de ${dataLimite.toLocaleDateString('pt-BR')})`;
+            } else {
+                document.getElementById('filtro-info').textContent = 'Todos os registros (sem filtro)';
+            }
+        }
+
+        // Atualiza a info quando mudar o filtro
+        document.getElementById('dias-filter').addEventListener('change', atualizarInfoData);
 
 
         // ==========================================================
@@ -230,7 +266,30 @@
             if (filtros.dias > 0) {
                 const dataLimite = new Date();
                 dataLimite.setDate(dataLimite.getDate() - filtros.dias);
-                query = query.lt('created_at', dataLimite.toISOString());
+                // Usa gte (maior ou igual) para pegar registros a partir da data limite
+                query = query.gte('created_at', dataLimite.toISOString());
+            }
+
+            if (filtros.conferente && tabela === 'conferencia_log') {
+                query = query.eq('conferente', filtros.conferente);
+            }
+
+            // Limita para não travar
+            query = query.limit(1000);
+
+            return query;
+        }
+
+        function buildDeleteQuery(tabela, filtros) {
+            let query = supabaseClient.from(tabela).delete();
+            
+            if (filtros.dias > 0) {
+                const dataLimite = new Date();
+                dataLimite.setDate(dataLimite.getDate() - filtros.dias);
+                query = query.gte('created_at', dataLimite.toISOString());
+            } else {
+                // Se não tiver filtro de data, exclui todos
+                query = query.neq('id', 0);
             }
 
             if (filtros.conferente && tabela === 'conferencia_log') {
@@ -268,34 +327,45 @@
 
                 // Mostra resultados
                 let html = '';
-                resultados.forEach(r => {
-                    html += `<div class="flex justify-between items-center bg-slate-700/30 px-3 py-1.5 rounded">
-                                <span class="font-medium">${r.tabela}</span>
-                                <span class="text-amber-400 font-bold">${r.count} registros</span>
-                            </div>`;
+                if (total === 0) {
+                    html = `<div class="text-center text-slate-400 py-4">📭 Nenhum registro encontrado com os filtros selecionados.</div>`;
                     
-                    // Mostra os primeiros registros
-                    if (r.data.length > 0) {
-                        const primeiros = r.data.slice(0, 5);
-                        primeiros.forEach(item => {
-                            const data = item.created_at ? new Date(item.created_at).toLocaleString('pt-BR') : '-';
-                            html += `<div class="flex justify-between items-center bg-slate-800/30 px-3 py-1 rounded text-xs text-slate-400 ml-4">
-                                        <span>NR: ${item.nr || 'N/A'}</span>
-                                        <span>Conferente: ${item.conferente || '-'}</span>
-                                        <span>${data}</span>
-                                    </div>`;
-                        });
-                        if (r.data.length > 5) {
-                            html += `<div class="text-xs text-slate-500 ml-4">... e mais ${r.data.length - 5} registros</div>`;
-                        }
+                    // Mostra a data limite para ajudar a entender
+                    if (filtros.dias > 0) {
+                        const dataLimite = new Date();
+                        dataLimite.setDate(dataLimite.getDate() - filtros.dias);
+                        html += `<div class="text-center text-xs text-slate-500 mt-2">Data limite (início): ${dataLimite.toLocaleString('pt-BR')}</div>`;
+                        html += `<div class="text-center text-xs text-slate-500">Data atual: ${new Date().toLocaleString('pt-BR')}</div>`;
                     }
-                });
+                } else {
+                    resultados.forEach(r => {
+                        html += `<div class="flex justify-between items-center bg-slate-700/30 px-3 py-1.5 rounded">
+                                    <span class="font-medium">${r.tabela}</span>
+                                    <span class="text-amber-400 font-bold">${r.count} registros</span>
+                                </div>`;
+                        
+                        if (r.data.length > 0) {
+                            const primeiros = r.data.slice(0, 5);
+                            primeiros.forEach(item => {
+                                const data = item.created_at ? new Date(item.created_at).toLocaleString('pt-BR') : '-';
+                                html += `<div class="flex justify-between items-center bg-slate-800/30 px-3 py-1 rounded text-xs text-slate-400 ml-4">
+                                            <span>NR: ${item.nr || 'N/A'}</span>
+                                            <span>Conferente: ${item.conferente || '-'}</span>
+                                            <span>${data}</span>
+                                        </div>`;
+                            });
+                            if (r.data.length > 5) {
+                                html += `<div class="text-xs text-slate-500 ml-4">... e mais ${r.data.length - 5} registros</div>`;
+                            }
+                        }
+                    });
+                }
 
                 lista.innerHTML = html;
                 container.classList.remove('hidden');
 
                 if (total === 0) {
-                    status.textContent = '✅ Nenhum registro encontrado com os filtros selecionados.';
+                    status.textContent = '✅ Nenhum registro encontrado com os filtros selecionados. Tente ajustar os filtros.';
                     status.className = 'mt-4 p-3 rounded-lg text-sm text-green-400 bg-green-900/20 border border-green-500/30';
                 } else {
                     status.textContent = `📊 Encontrados ${total} registros para exclusão.`;
@@ -309,20 +379,16 @@
             }
         }
 
-        async function excluirRegistros(confirmacao = false) {
+        async function excluirRegistros() {
             const tabelas = getTabelas();
             const filtros = getFiltros();
             const status = document.getElementById('status-area');
 
-            // Confirmação
-            if (!confirmacao) {
-                if (!confirm('⚠️ Tem certeza que deseja excluir os registros selecionados?\n\nEsta ação é PERMANENTE e não pode ser desfeita!')) {
-                    return;
-                }
-                // Segunda confirmação
-                if (!confirm('🔄 ÚLTIMA CHANCE! Deseja realmente prosseguir com a exclusão?')) {
-                    return;
-                }
+            if (!confirm('⚠️ Tem certeza que deseja excluir os registros selecionados?\n\nEsta ação é PERMANENTE e não pode ser desfeita!')) {
+                return;
+            }
+            if (!confirm('🔄 ÚLTIMA CHANCE! Deseja realmente prosseguir com a exclusão?')) {
+                return;
             }
 
             status.className = 'mt-4 p-3 rounded-lg text-sm';
@@ -334,18 +400,7 @@
                 let totalExcluidos = 0;
 
                 for (const tabela of tabelas) {
-                    let query = supabaseClient.from(tabela).delete();
-                    
-                    if (filtros.dias > 0) {
-                        const dataLimite = new Date();
-                        dataLimite.setDate(dataLimite.getDate() - filtros.dias);
-                        query = query.lt('created_at', dataLimite.toISOString());
-                    }
-
-                    if (filtros.conferente && tabela === 'conferencia_log') {
-                        query = query.eq('conferente', filtros.conferente);
-                    }
-
+                    const query = buildDeleteQuery(tabela, filtros);
                     const { data, error } = await query;
 
                     if (error) throw error;
@@ -355,7 +410,6 @@
                 status.textContent = `✅ Exclusão concluída! ${totalExcluidos} registros removidos.`;
                 status.className = 'mt-4 p-3 rounded-lg text-sm text-green-400 bg-green-900/20 border border-green-500/30';
 
-                // Atualiza contagens
                 await carregarContagens();
                 await contarRegistros();
 
@@ -392,7 +446,7 @@
                     const { data, error } = await supabaseClient
                         .from(tabela)
                         .delete()
-                        .neq('id', 0); // Exclui todos
+                        .neq('id', 0);
 
                     if (error) throw error;
                     totalExcluidos += data?.length || 0;
@@ -417,10 +471,9 @@
         // ==========================================================
 
         document.getElementById('btn-contar').addEventListener('click', contarRegistros);
-        document.getElementById('btn-excluir').addEventListener('click', () => excluirRegistros(false));
+        document.getElementById('btn-excluir').addEventListener('click', excluirRegistros);
         document.getElementById('btn-excluir-tudo').addEventListener('click', excluirTudo);
 
-        // Carrega contagem inicial
         setTimeout(carregarContagens, 1000);
 
         console.log('🗑️ Painel de limpeza de dados iniciado');
