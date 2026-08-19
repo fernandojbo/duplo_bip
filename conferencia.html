@@ -40,6 +40,14 @@
                 Bipe a etiqueta <strong>NR</strong>
             </p>
 
+            <!-- Indicador de processamento -->
+            <div id="processing-indicator" class="hidden mb-4 p-2 bg-amber-900/50 border border-amber-500 rounded-lg">
+                <div class="flex items-center justify-center gap-2">
+                    <div class="w-3 h-3 bg-amber-400 rounded-full animate-pulse"></div>
+                    <span class="text-xs text-amber-300 font-semibold">⏳ Processando...</span>
+                </div>
+            </div>
+
             <div class="space-y-3 text-left">
                 <div>
                     <label class="text-xs text-slate-400 block">NR Lida:</label>
@@ -49,6 +57,12 @@
                 <div>
                     <label class="text-xs text-slate-400 block">Volume Lido:</label>
                     <span id="display-volume" class="text-xl font-mono font-bold text-amber-400">-</span>
+                </div>
+
+                <!-- NOVO: Código limpo (para debug) -->
+                <div id="debug-info" class="hidden mt-2 p-2 bg-slate-700/50 border border-slate-600 rounded-lg">
+                    <span class="text-xs text-slate-400 block font-bold">🔍 Código capturado:</span>
+                    <span id="display-raw" class="text-xs font-mono text-slate-300 break-all">-</span>
                 </div>
 
                 <div id="cliente-info" class="hidden mt-2 p-2 bg-blue-900/50 border border-blue-500 rounded-lg">
@@ -172,6 +186,28 @@
 
 
         // ==========================================================
+        // FUNÇÃO PARA LIMPAR CÓDIGO (MAIS ROBUSTA)
+        // ==========================================================
+
+        function limparCodigo(codigo) {
+            if (!codigo) return '';
+            
+            let limpo = String(codigo);
+            
+            // Remove caracteres especiais e quebras de linha
+            limpo = limpo.replace(/[\r\n\t]/g, '');
+            
+            // Remove espaços extras
+            limpo = limpo.trim();
+            
+            // Remove caracteres não alfanuméricos (mantém apenas números e letras)
+            limpo = limpo.replace(/[^a-zA-Z0-9]/g, '');
+            
+            return limpo;
+        }
+
+
+        // ==========================================================
         // CONFIGURAÇÃO SUPABASE
         // ==========================================================
 
@@ -188,6 +224,7 @@
         let nrAtual = '';
         let processando = false;
         let timeoutFeedback = null;
+        let tentativasValidacao = 0;
 
 
         /* ==========================================================
@@ -208,6 +245,9 @@
         const displayCliente = document.getElementById('display-cliente');
         const matchInfo = document.getElementById('match-info');
         const displayMatch = document.getElementById('display-match');
+        const processingIndicator = document.getElementById('processing-indicator');
+        const debugInfo = document.getElementById('debug-info');
+        const displayRaw = document.getElementById('display-raw');
 
 
         /* ==========================================================
@@ -235,6 +275,13 @@
                     }
                 });
             }
+
+            // Ativa debug (pressione D para mostrar/ocultar)
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'd' && e.ctrlKey) {
+                    debugInfo.classList.toggle('hidden');
+                }
+            });
         });
 
         function inicializarSupabase() {
@@ -269,7 +316,7 @@
 
 
         /* ==========================================================
-           SONS - MAIS CURTOS
+           SONS
            ========================================================== */
 
         function tocarSom(tipo) {
@@ -289,7 +336,6 @@
                     osc.start(audioCtx.currentTime);
                     osc.stop(audioCtx.currentTime + 0.1);
                     
-                    // Segundo bip mais curto
                     setTimeout(() => {
                         const osc2 = audioCtx.createOscillator();
                         const gain2 = audioCtx.createGain();
@@ -336,10 +382,29 @@
         inputField.addEventListener('keydown', async function(e) {
             if (e.key === 'Enter' && !processando) {
                 processando = true;
+                tentativasValidacao = 0;
+                
+                // Mostra indicador de processamento
+                processingIndicator.classList.remove('hidden');
+                
                 try {
-                    const codigoLido = inputField.value.trim().replace(/\r/g, '').replace(/\n/g, '');
+                    const codigoBruto = inputField.value;
+                    const codigoLido = limparCodigo(codigoBruto);
+                    
+                    // Mostra o código bruto no debug
+                    displayRaw.textContent = codigoBruto || '-';
+                    debugInfo.classList.remove('hidden');
+                    
                     inputField.value = '';
-                    if (!codigoLido) { processando = false; return; }
+                    
+                    console.log('🔍 Código bruto:', codigoBruto);
+                    console.log('🔍 Código limpo:', codigoLido);
+                    
+                    if (!codigoLido) { 
+                        processando = false;
+                        processingIndicator.classList.add('hidden');
+                        return; 
+                    }
 
                     if (etapa === 1) {
                         nrAtual = codigoLido;
@@ -354,20 +419,31 @@
                         instructionSub.innerHTML = "Bipe a etiqueta de <strong>Volume</strong>";
                         tocarSom('neutro');
                         
+                        processando = false;
+                        processingIndicator.classList.add('hidden');
+                        
                     } else if (etapa === 2) {
                         const volumeLido = codigoLido;
                         displayVolume.textContent = volumeLido;
                         await validarNoSupabase(nrAtual, volumeLido);
                     }
-                } finally {
+                } catch (err) {
+                    console.error('❌ Erro na leitura:', err);
                     processando = false;
+                    processingIndicator.classList.add('hidden');
+                } finally {
+                    // Garante que o processamento seja liberado mesmo em caso de erro
+                    setTimeout(() => {
+                        processando = false;
+                        processingIndicator.classList.add('hidden');
+                    }, 500);
                 }
             }
         });
 
 
         /* ==========================================================
-           VALIDAÇÃO NO SUPABASE
+           VALIDAÇÃO NO SUPABASE - COM RETRY E VALIDAÇÃO DUPLA
            ========================================================== */
 
         async function validarNoSupabase(nr, volume) {
@@ -375,6 +451,8 @@
                 inicializarSupabase();
                 if (!supabaseClient) {
                     setFeedbackVisual(false, "ERRO", "Supabase não conectado.");
+                    processando = false;
+                    processingIndicator.classList.add('hidden');
                     return;
                 }
             }
@@ -384,6 +462,7 @@
             const conferente = obterConferente();
 
             try {
+                // 1. PRIMEIRA VALIDAÇÃO
                 const { data: registro, error } = await supabaseClient
                     .from('conferencia')
                     .select('*')
@@ -393,29 +472,36 @@
 
                 if (error) throw error;
 
-                if (registro) {
-                    // ✅ SUCESSO
-                    await salvarLogConferencia({
-                        nr: nrLida,
-                        volume_clie: volumeLido,
-                        conferente: conferente.nome || 'Desconhecido',
-                        status: 'sucesso',
-                        mensagem: null
-                    });
-
-                    if (registro.cliente || registro.remetente) {
-                        clienteInfo.classList.remove('hidden');
-                        displayCliente.textContent = registro.cliente || registro.remetente || 'N/A';
-                    } else {
-                        clienteInfo.classList.add('hidden');
+                // 2. SE NÃO ENCONTROU, TENTA NOVAMENTE (para evitar falso negativo)
+                if (!registro) {
+                    console.warn('⚠️ Primeira tentativa falhou, tentando novamente...');
+                    tentativasValidacao++;
+                    
+                    // Aguarda 300ms e tenta de novo
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                    
+                    const { data: registro2, error: error2 } = await supabaseClient
+                        .from('conferencia')
+                        .select('*')
+                        .eq('nr', nrLida)
+                        .eq('volume_clie', volumeLido)
+                        .maybeSingle();
+                    
+                    if (error2) throw error2;
+                    
+                    if (registro2) {
+                        // Encontrou na segunda tentativa!
+                        console.log('✅ Encontrado na segunda tentativa!');
+                        await processarSucesso(registro2, nrLida, volumeLido, conferente);
+                        return;
                     }
+                }
 
-                    matchInfo.classList.remove('hidden');
-                    displayMatch.textContent = volumeLido + ' ✅';
-
-                    setFeedbackVisual(true, "✅ CONFERIDO", null);
+                // 3. SE ENCONTROU NA PRIMEIRA OU CONTINUA NÃO ENCONTRADO
+                if (registro) {
+                    await processarSucesso(registro, nrLida, volumeLido, conferente);
                 } else {
-                    // ❌ ERRO
+                    // 4. NÃO ENCONTROU - verifica se a NR existe
                     const { data: nrExiste } = await supabaseClient
                         .from('conferencia')
                         .select('nr')
@@ -424,7 +510,7 @@
 
                     let mensagemErro = '';
                     if (!nrExiste) {
-                        mensagemErro = `NR ${nrLida} não existe`;
+                        mensagemErro = `NR ${nrLida} não existe na base`;
                         setFeedbackVisual(false, "❌ NR INVÁLIDA", mensagemErro);
                     } else {
                         mensagemErro = `Volume ${volumeLido} não pertence à NR ${nrLida}`;
@@ -441,9 +527,39 @@
                 }
 
             } catch (err) {
-                console.error("Erro detalhado no Supabase:", err);
+                console.error("❌ Erro detalhado no Supabase:", err);
                 setFeedbackVisual(false, "❌ ERRO", err.message || "Falha ao buscar dados.");
+            } finally {
+                processando = false;
+                processingIndicator.classList.add('hidden');
             }
+        }
+
+        // ==========================================================
+        // FUNÇÃO AUXILIAR PARA PROCESSAR SUCESSO
+        // ==========================================================
+
+        async function processarSucesso(registro, nrLida, volumeLido, conferente) {
+            await salvarLogConferencia({
+                nr: nrLida,
+                volume_clie: volumeLido,
+                conferente: conferente.nome || 'Desconhecido',
+                status: 'sucesso',
+                mensagem: null
+            });
+
+            if (registro.cliente || registro.remetente) {
+                clienteInfo.classList.remove('hidden');
+                displayCliente.textContent = registro.cliente || registro.remetente || 'N/A';
+            } else {
+                clienteInfo.classList.add('hidden');
+            }
+
+            matchInfo.classList.remove('hidden');
+            displayMatch.textContent = volumeLido + ' ✅';
+
+            const msgExtra = tentativasValidacao > 0 ? ` (${tentativasValidacao}ª tentativa)` : '';
+            setFeedbackVisual(true, `✅ CONFERIDO${msgExtra}`, null);
         }
 
 
@@ -452,7 +568,6 @@
            ========================================================== */
 
         function setFeedbackVisual(sucesso, mensagem, detalheExtra) {
-            // Cancela timeout anterior
             if (timeoutFeedback) {
                 clearTimeout(timeoutFeedback);
                 timeoutFeedback = null;
@@ -477,7 +592,6 @@
                 tocarSom('erro');
             }
 
-            // ⚡ TEMPOS MÍNIMOS: 400ms para sucesso, 600ms para erro
             const tempoEspera = sucesso ? 400 : 600;
 
             timeoutFeedback = setTimeout(() => {
@@ -494,7 +608,6 @@
                 nrAtual = '';
                 timeoutFeedback = null;
                 
-                // Foca no input imediatamente
                 inputField.focus();
             }, tempoEspera);
         }
