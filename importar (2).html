@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Importação de Conferência - FreteOnX</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script type="module">
+        import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+        window.supabaseClient = createClient('https://fqrfknyludtvqaaajjoc.supabase.co', 'sb_publishable_fkC9WhreuFmhmbVRCw6Isw_rftuBACx');
+    </script>
+</head>
+<body class="bg-slate-900 text-white min-h-screen flex items-center justify-center p-4">
+
+    <div class="bg-slate-800 p-8 rounded-2xl shadow-xl w-full max-w-lg border border-slate-700">
+        <h2 class="text-2xl font-bold mb-2 text-white">Importar Dados</h2>
+        <p class="text-slate-400 text-sm mb-6">
+            O arquivo CSV ou XLSX deve conter as colunas: <code class="bg-slate-900 px-1 rounded">NR, NF, VOLUME_CLIE</code>.
+        </p>
+
+        <div class="border-2 border-dashed border-slate-600 rounded-xl p-8 text-center hover:border-amber-500 transition-colors">
+            <input type="file" id="fileInput" accept=".csv,.xls,.xlsx" class="hidden">
+            <label for="fileInput" class="cursor-pointer">
+                <span class="block text-amber-400 font-bold mb-2">Clique para selecionar CSV ou XLSX</span>
+                <span id="fileName" class="text-xs text-slate-500">Nenhum arquivo escolhido</span>
+            </label>
+        </div>
+
+        <button id="btnImportar" class="w-full mt-6 py-3 bg-amber-600 hover:bg-amber-700 font-bold rounded-xl transition-all disabled:opacity-50">
+            Iniciar Importação
+        </button>
+        
+        <div id="status" class="mt-4 text-center text-sm font-semibold"></div>
+    </div>
+
+    <script>
+        document.getElementById('fileInput').addEventListener('change', (e) => {
+            document.getElementById('fileName').textContent = e.target.files[0]?.name || 'Nenhum arquivo';
+        });
+
+        document.getElementById('btnImportar').addEventListener('click', () => {
+            const file = document.getElementById('fileInput').files[0];
+            if (!file) return alert('Selecione um arquivo!');
+            
+            const btn = document.getElementById('btnImportar');
+            const status = document.getElementById('status');
+            btn.disabled = true;
+            status.textContent = "Processando...";
+            status.className = "mt-4 text-center text-sm font-semibold text-slate-400";
+
+            const limpaStr = (val) => String(val || '').replace(/[^0-9A-Za-z]/g, '').trim();
+
+            // ==========================================================
+            // DETECTA SE É EXCEL (XLS ou XLSX)
+            // ==========================================================
+            const isExcel = file.name.endsWith('.xls') || file.name.endsWith('.xlsx');
+
+            if (isExcel) {
+                // ==========================================================
+                // LEITURA DE ARQUIVO EXCEL (XLS / XLSX)
+                // ==========================================================
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                        const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+
+                        console.log('📊 Dados lidos do Excel:', jsonData);
+
+                        // Mapeia os dados
+                        const parsedData = jsonData
+                            .map(row => {
+                                // Procura as colunas (case insensitive)
+                                const keys = Object.keys(row);
+                                const findKey = (nome) => keys.find(k => k.toLowerCase().trim() === nome.toLowerCase().trim());
+                                
+                                const keyNR = findKey('nr');
+                                const keyNF = findKey('nf');
+                                const keyVOL = findKey('volume_clie');
+
+                                return {
+                                    nr: limpaStr(row[keyNR] || ''),
+                                    nf: limpaStr(row[keyNF] || ''),
+                                    volume_clie: limpaStr(row[keyVOL] || '')
+                                };
+                            })
+                            .filter(row => row.volume_clie !== '' && row.nr !== '');
+
+                        console.log('📦 Dados parseados:', parsedData);
+
+                        if (parsedData.length === 0) {
+                            status.textContent = "❌ Erro: Nenhuma linha válida encontrada no arquivo.";
+                            status.className = "mt-4 text-center text-red-400 font-semibold";
+                            btn.disabled = false;
+                            return;
+                        }
+
+                        importarDados(parsedData, status, btn);
+                    } catch (err) {
+                        console.error('❌ Erro:', err);
+                        status.textContent = "❌ Erro ao ler arquivo: " + err.message;
+                        status.className = "mt-4 text-center text-red-400 font-semibold";
+                        btn.disabled = false;
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            } else {
+                // ==========================================================
+                // LEITURA DE ARQUIVO CSV (PapaParse)
+                // ==========================================================
+                Papa.parse(file, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: async (results) => {
+                        const data = results.data
+                            .map(row => {
+                                const limpaStr = (val) => String(val || '').replace(/[^0-9A-Za-z]/g, '').trim();
+                                return {
+                                    nr: limpaStr(row.NR || row.nr),
+                                    nf: limpaStr(row.NF || row.nf),
+                                    volume_clie: limpaStr(row.VOLUME_CLIE || row.volume_clie)
+                                };
+                            })
+                            .filter(row => row.volume_clie !== '' && row.nr !== '');
+
+                        if (data.length === 0) {
+                            status.textContent = "❌ Erro: Nenhuma linha válida encontrada no CSV.";
+                            status.className = "mt-4 text-center text-red-400 font-semibold";
+                            btn.disabled = false;
+                            return;
+                        }
+
+                        await importarDados(data, status, btn);
+                    }
+                });
+            }
+        });
+
+        // ==========================================================
+        // FUNÇÃO PARA IMPORTAR PARA O SUPABASE (SEM onConflict)
+        // ==========================================================
+        async function importarDados(data, status, btn) {
+            try {
+                console.log('📤 Enviando para Supabase:', data);
+
+                // Usa insert() em vez de upsert() para evitar erro de constraint
+                const { data: resultado, error } = await window.supabaseClient
+                    .from('conferencia')
+                    .insert(data);
+
+                if (error) {
+                    console.error('❌ Erro do Supabase:', error);
+                    throw error;
+                }
+
+                console.log('✅ Importado com sucesso:', resultado);
+                
+                status.textContent = `✅ Importação concluída! (${data.length} registros)`;
+                status.className = "mt-4 text-center text-green-400 font-semibold";
+            } catch (err) {
+                console.error('❌ Erro ao importar:', err);
+                status.textContent = "❌ Erro ao importar: " + err.message;
+                status.className = "mt-4 text-center text-red-400 font-semibold";
+            } finally {
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
