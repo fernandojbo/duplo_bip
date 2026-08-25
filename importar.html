@@ -10,56 +10,161 @@
         import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
         window.supabaseClient = createClient('https://fqrfknyludtvqaaajjoc.supabase.co', 'sb_publishable_fkC9WhreuFmhmbVRCw6Isw_rftuBACx');
     </script>
+    <style>
+        .campo-obrigatorio::after {
+            content: " *";
+            color: #ef4444;
+            font-weight: bold;
+        }
+        .detectado {
+            background-color: rgba(52, 211, 153, 0.15);
+            border-color: rgba(52, 211, 153, 0.3);
+        }
+        .nao-detectado {
+            background-color: rgba(251, 191, 36, 0.08);
+            border-color: rgba(251, 191, 36, 0.2);
+        }
+    </style>
 </head>
 <body class="bg-slate-900 text-white min-h-screen flex items-center justify-center p-4">
 
-    <div class="bg-slate-800 p-8 rounded-2xl shadow-xl w-full max-w-lg border border-slate-700">
-        <h2 class="text-2xl font-bold mb-2 text-white">Importar Dados</h2>
+    <div class="bg-slate-800 p-8 rounded-2xl shadow-xl w-full max-w-2xl border border-slate-700">
+        <h2 class="text-2xl font-bold mb-2 text-white">📥 Importar Dados</h2>
         <p class="text-slate-400 text-sm mb-6">
-            O arquivo CSV ou XLSX deve conter as colunas: <code class="bg-slate-900 px-1 rounded">NR, NF, VOLUME_CLIE</code>.
+            Selecione o arquivo e indique quais colunas correspondem aos dados do sistema.
         </p>
 
-        <div class="border-2 border-dashed border-slate-600 rounded-xl p-8 text-center hover:border-amber-500 transition-colors">
+        <!-- Upload do arquivo -->
+        <div class="border-2 border-dashed border-slate-600 rounded-xl p-6 text-center hover:border-amber-500 transition-colors">
             <input type="file" id="fileInput" accept=".csv,.xls,.xlsx" class="hidden">
-            <label for="fileInput" class="cursor-pointer">
+            <label for="fileInput" class="cursor-pointer block">
+                <span class="text-4xl block mb-2">📂</span>
                 <span class="block text-amber-400 font-bold mb-2">Clique para selecionar CSV ou XLSX</span>
                 <span id="fileName" class="text-xs text-slate-500">Nenhum arquivo escolhido</span>
             </label>
         </div>
 
-        <button id="btnImportar" class="w-full mt-6 py-3 bg-amber-600 hover:bg-amber-700 font-bold rounded-xl transition-all disabled:opacity-50">
-            Iniciar Importação
-        </button>
-        
+        <!-- Área de Mapeamento -->
+        <div id="mapeamento-area" class="hidden mt-6">
+            <div class="bg-amber-900/20 border border-amber-500/30 rounded-lg p-3 mb-4">
+                <p class="text-xs text-amber-300">
+                    <i class="fas fa-info-circle mr-1"></i>
+                    <strong>Como funciona:</strong> Selecione em cada campo abaixo qual coluna do seu arquivo corresponde aos dados que deseja importar.
+                    <span class="text-amber-400 font-semibold">Campos com * são obrigatórios.</span>
+                </p>
+            </div>
+
+            <h3 class="text-md font-semibold text-white mb-3">🔀 Mapeamento de Colunas</h3>
+            <p class="text-xs text-slate-400 mb-3">Colunas em <span class="text-emerald-400">verde</span> foram detectadas automaticamente. Confirme se está correto.</p>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1 campo-obrigatorio">📋 NR (Etiqueta)</label>
+                    <select id="map-nr" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500">
+                        <option value="">🔽 Selecione a coluna...</option>
+                    </select>
+                    <p class="text-[10px] text-slate-500 mt-1">Código da etiqueta da transportadora</p>
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">📄 NF (Nota Fiscal)</label>
+                    <select id="map-nf" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500">
+                        <option value="">🔽 Selecione a coluna...</option>
+                    </select>
+                    <p class="text-[10px] text-slate-500 mt-1">Número da nota fiscal (opcional)</p>
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1 campo-obrigatorio">📦 VOLUME_CLIE</label>
+                    <select id="map-volume" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500">
+                        <option value="">🔽 Selecione a coluna...</option>
+                    </select>
+                    <p class="text-[10px] text-slate-500 mt-1">Código de barras do volume</p>
+                </div>
+            </div>
+
+            <!-- Preview dos dados -->
+            <div id="preview-area" class="hidden mt-4">
+                <h4 class="text-sm font-semibold text-slate-300 mb-2">👁️ Preview dos dados</h4>
+                <div class="overflow-x-auto max-h-48 overflow-y-auto bg-slate-900/50 rounded-lg p-2">
+                    <table class="w-full text-xs" id="preview-table">
+                        <thead class="text-slate-400 border-b border-slate-700">
+                            <tr id="preview-header"></tr>
+                        </thead>
+                        <tbody id="preview-body"></tbody>
+                    </table>
+                </div>
+                <p class="text-[10px] text-slate-500 mt-2">Mostrando as primeiras 5 linhas do arquivo</p>
+            </div>
+
+            <button id="btnImportar" class="w-full mt-4 py-3 bg-amber-600 hover:bg-amber-700 font-bold rounded-xl transition-all disabled:opacity-50">
+                🚀 Importar Dados
+            </button>
+        </div>
+
         <div id="status" class="mt-4 text-center text-sm font-semibold"></div>
     </div>
 
     <script>
-        document.getElementById('fileInput').addEventListener('change', (e) => {
-            document.getElementById('fileName').textContent = e.target.files[0]?.name || 'Nenhum arquivo';
-        });
+        // ==========================================================
+        // VARIÁVEIS
+        // ==========================================================
 
-        document.getElementById('btnImportar').addEventListener('click', () => {
-            const file = document.getElementById('fileInput').files[0];
-            if (!file) return alert('Selecione um arquivo!');
+        let dadosBrutos = [];
+        let colunasArquivo = [];
+        let dadosParsed = [];
+        let mapeamentoSalvo = {};
+
+        // ==========================================================
+        // MAPEAMENTO DE SINÔNIMOS
+        // ==========================================================
+
+        const sinonimos = {
+            nr: [
+                'nr', 'nro', 'numero', 'num', 'nota_remessa', 'remessa', 
+                'etiqueta', 'codigo_nr', 'n°', 'codigo_de_barras', 
+                'codigo barras', 'chave nf', 'nf-e', 'nfe', 'codigo_de_barras_do_nf-e',
+                'codigo barras nf-e', 'codigo de barras do nf-e'
+            ],
+            nf: [
+                'nf', 'nota_fiscal', 'notafiscal', 'nota', 'nf_e', 'nf-e', 
+                'nfe', 'documento', 'nota fiscal', 'numero_nota'
+            ],
+            volume_clie: [
+                'volume_clie', 'volumeclie', 'volume', 'vol_clie', 'vol', 
+                'cliente_volume', 'codigo_volume', 'vol_cliente', 'shipment', 
+                'nvolume', 'nv', 'codigo_barras', 'nv'
+            ]
+        };
+
+        function detectarColuna(nomeColuna) {
+            const nomeLower = nomeColuna.toLowerCase().trim();
             
-            const btn = document.getElementById('btnImportar');
+            for (const [campo, sinList] of Object.entries(sinonimos)) {
+                for (const sin of sinList) {
+                    if (nomeLower === sin || nomeLower.includes(sin) || sin.includes(nomeLower)) {
+                        return campo;
+                    }
+                }
+            }
+            return null;
+        }
+
+
+        // ==========================================================
+        // LEITURA DO ARQUIVO
+        // ==========================================================
+
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            document.getElementById('fileName').textContent = file?.name || 'Nenhum arquivo';
+            
+            if (!file) return;
+
+            const isExcel = file.name.endsWith('.xls') || file.name.endsWith('.xlsx');
             const status = document.getElementById('status');
-            btn.disabled = true;
-            status.textContent = "Processando...";
+            status.textContent = "⏳ Lendo arquivo...";
             status.className = "mt-4 text-center text-sm font-semibold text-slate-400";
 
-            const limpaStr = (val) => String(val || '').replace(/[^0-9A-Za-z]/g, '').trim();
-
-            // ==========================================================
-            // DETECTA SE É EXCEL (XLS ou XLSX)
-            // ==========================================================
-            const isExcel = file.name.endsWith('.xls') || file.name.endsWith('.xlsx');
-
             if (isExcel) {
-                // ==========================================================
-                // LEITURA DE ARQUIVO EXCEL (XLS / XLSX)
-                // ==========================================================
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     try {
@@ -67,98 +172,206 @@
                         const workbook = XLSX.read(data, { type: 'array' });
                         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
                         const jsonData = XLSX.utils.sheet_to_json(firstSheet);
-
-                        console.log('📊 Dados lidos do Excel:', jsonData);
-
-                        // Mapeia os dados
-                        const parsedData = jsonData
-                            .map(row => {
-                                // Procura as colunas (case insensitive)
-                                const keys = Object.keys(row);
-                                const findKey = (nome) => keys.find(k => k.toLowerCase().trim() === nome.toLowerCase().trim());
-                                
-                                const keyNR = findKey('nr');
-                                const keyNF = findKey('nf');
-                                const keyVOL = findKey('volume_clie');
-
-                                return {
-                                    nr: limpaStr(row[keyNR] || ''),
-                                    nf: limpaStr(row[keyNF] || ''),
-                                    volume_clie: limpaStr(row[keyVOL] || '')
-                                };
-                            })
-                            .filter(row => row.volume_clie !== '' && row.nr !== '');
-
-                        console.log('📦 Dados parseados:', parsedData);
-
-                        if (parsedData.length === 0) {
-                            status.textContent = "❌ Erro: Nenhuma linha válida encontrada no arquivo.";
-                            status.className = "mt-4 text-center text-red-400 font-semibold";
-                            btn.disabled = false;
-                            return;
-                        }
-
-                        importarDados(parsedData, status, btn);
+                        
+                        dadosBrutos = jsonData;
+                        processarArquivo(jsonData);
                     } catch (err) {
                         console.error('❌ Erro:', err);
                         status.textContent = "❌ Erro ao ler arquivo: " + err.message;
                         status.className = "mt-4 text-center text-red-400 font-semibold";
-                        btn.disabled = false;
                     }
                 };
                 reader.readAsArrayBuffer(file);
             } else {
-                // ==========================================================
-                // LEITURA DE ARQUIVO CSV (PapaParse)
-                // ==========================================================
                 Papa.parse(file, {
                     header: true,
                     skipEmptyLines: true,
-                    complete: async (results) => {
-                        const data = results.data
-                            .map(row => {
-                                const limpaStr = (val) => String(val || '').replace(/[^0-9A-Za-z]/g, '').trim();
-                                return {
-                                    nr: limpaStr(row.NR || row.nr),
-                                    nf: limpaStr(row.NF || row.nf),
-                                    volume_clie: limpaStr(row.VOLUME_CLIE || row.volume_clie)
-                                };
-                            })
-                            .filter(row => row.volume_clie !== '' && row.nr !== '');
-
-                        if (data.length === 0) {
-                            status.textContent = "❌ Erro: Nenhuma linha válida encontrada no CSV.";
-                            status.className = "mt-4 text-center text-red-400 font-semibold";
-                            btn.disabled = false;
-                            return;
-                        }
-
-                        await importarDados(data, status, btn);
+                    complete: function(results) {
+                        dadosBrutos = results.data;
+                        processarArquivo(results.data);
                     }
                 });
             }
         });
 
-        // ==========================================================
-        // FUNÇÃO PARA IMPORTAR PARA O SUPABASE (SEM onConflict)
-        // ==========================================================
-        async function importarDados(data, status, btn) {
-            try {
-                console.log('📤 Enviando para Supabase:', data);
 
-                // Usa insert() em vez de upsert() para evitar erro de constraint
+        // ==========================================================
+        // PROCESSAR ARQUIVO E MOSTRAR MAPEAMENTO
+        // ==========================================================
+
+        function processarArquivo(data) {
+            if (!data || data.length === 0) {
+                document.getElementById('status').textContent = "❌ Arquivo vazio ou inválido!";
+                document.getElementById('status').className = "mt-4 text-center text-red-400 font-semibold";
+                return;
+            }
+
+            colunasArquivo = Object.keys(data[0]);
+            
+            // Detecta mapeamento automático
+            const map = { nr: null, nf: null, volume_clie: null };
+            const detectados = { nr: false, nf: false, volume_clie: false };
+
+            for (const col of colunasArquivo) {
+                const detected = detectarColuna(col);
+                if (detected && !map[detected]) {
+                    map[detected] = col;
+                    detectados[detected] = true;
+                }
+            }
+
+            // Preenche os selects
+            const selectNR = document.getElementById('map-nr');
+            const selectNF = document.getElementById('map-nf');
+            const selectVOL = document.getElementById('map-volume');
+
+            [selectNR, selectNF, selectVOL].forEach(sel => {
+                sel.innerHTML = '<option value="">🔽 Selecione a coluna...</option>';
+                colunasArquivo.forEach(col => {
+                    const opt = document.createElement('option');
+                    opt.value = col;
+                    opt.textContent = col;
+                    sel.appendChild(opt);
+                });
+            });
+
+            if (map.nr) {
+                selectNR.value = map.nr;
+                selectNR.className = 'w-full bg-slate-700 border border-emerald-500/50 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 detectado';
+            } else {
+                selectNR.className = 'w-full bg-slate-700 border border-yellow-500/30 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 nao-detectado';
+            }
+
+            if (map.nf) {
+                selectNF.value = map.nf;
+                selectNF.className = 'w-full bg-slate-700 border border-emerald-500/50 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 detectado';
+            }
+
+            if (map.volume_clie) {
+                selectVOL.value = map.volume_clie;
+                selectVOL.className = 'w-full bg-slate-700 border border-emerald-500/50 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 detectado';
+            } else {
+                selectVOL.className = 'w-full bg-slate-700 border border-yellow-500/30 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 nao-detectado';
+            }
+
+            document.getElementById('mapeamento-area').classList.remove('hidden');
+            atualizarPreview(data);
+
+            const detectadas = Object.values(detectados).filter(Boolean).length;
+            document.getElementById('status').textContent = `📊 ${data.length} registros encontrados. ${detectadas} colunas detectadas automaticamente. Confirme o mapeamento abaixo.`;
+            document.getElementById('status').className = "mt-4 text-center text-sm font-semibold text-emerald-400";
+
+            // Salva mapeamento para reuso
+            mapeamentoSalvo = { nr: map.nr, nf: map.nf, volume_clie: map.volume_clie };
+        }
+
+
+        // ==========================================================
+        // ATUALIZAR PREVIEW
+        // ==========================================================
+
+        function atualizarPreview(data) {
+            const previewArea = document.getElementById('preview-area');
+            const header = document.getElementById('preview-header');
+            const body = document.getElementById('preview-body');
+
+            if (!data || data.length === 0) {
+                previewArea.classList.add('hidden');
+                return;
+            }
+
+            previewArea.classList.remove('hidden');
+
+            const cols = Object.keys(data[0]);
+            header.innerHTML = cols.map(c => `<th class="px-2 py-1 text-left text-slate-400 font-normal">${c}</th>`).join('');
+
+            const rows = data.slice(0, 5);
+            body.innerHTML = rows.map(row => {
+                return `<tr class="border-b border-slate-700/50">${cols.map(c => `<td class="px-2 py-1 text-slate-300 font-mono text-[10px]">${row[c] || '-'}</td>`).join('')}</tr>`;
+            }).join('');
+
+            document.getElementById('map-nr').onchange = () => atualizarDadosPreview();
+            document.getElementById('map-nf').onchange = () => atualizarDadosPreview();
+            document.getElementById('map-volume').onchange = () => atualizarDadosPreview();
+            
+            atualizarDadosPreview();
+        }
+
+
+        // ==========================================================
+        // ATUALIZAR DADOS PREVIEW
+        // ==========================================================
+
+        function atualizarDadosPreview() {
+            const colNR = document.getElementById('map-nr').value;
+            const colNF = document.getElementById('map-nf').value;
+            const colVOL = document.getElementById('map-volume').value;
+
+            if (!colNR || !colVOL) {
+                document.getElementById('status').textContent = "⚠️ Selecione as colunas NR e VOLUME_CLIE para continuar.";
+                document.getElementById('status').className = "mt-4 text-center text-sm font-semibold text-yellow-400";
+                return;
+            }
+
+            const limpaStr = (val) => String(val || '').replace(/[^0-9A-Za-z]/g, '').trim();
+
+            dadosParsed = dadosBrutos.map(row => ({
+                nr: limpaStr(row[colNR] || ''),
+                nf: colNF ? limpaStr(row[colNF] || '') : '',
+                volume_clie: limpaStr(row[colVOL] || '')
+            })).filter(row => row.volume_clie !== '' && row.nr !== '');
+
+            const header = document.getElementById('preview-header');
+            const body = document.getElementById('preview-body');
+            
+            const colsMap = ['nr', 'nf', 'volume_clie'];
+            const labels = ['📋 NR (Etiqueta)', '📄 NF', '📦 VOLUME_CLIE'];
+            
+            header.innerHTML = labels.map(l => `<th class="px-2 py-1 text-left text-amber-400 font-semibold">${l}</th>`).join('');
+
+            const rows = dadosParsed.slice(0, 5);
+            body.innerHTML = rows.map(row => {
+                return `<tr class="border-b border-slate-700/50">${colsMap.map(c => `<td class="px-2 py-1 text-slate-300 font-mono text-[10px]">${row[c] || '-'}</td>`).join('')}</tr>`;
+            }).join('');
+
+            document.getElementById('status').textContent = `📊 ${dadosParsed.length} registros validados para importação.`;
+            document.getElementById('status').className = "mt-4 text-center text-sm font-semibold text-emerald-400";
+        }
+
+
+        // ==========================================================
+        // FUNÇÃO PARA IMPORTAR
+        // ==========================================================
+
+        document.getElementById('btnImportar').addEventListener('click', async function() {
+            const colNR = document.getElementById('map-nr').value;
+            const colVOL = document.getElementById('map-volume').value;
+
+            if (!colNR || !colVOL) {
+                alert('⚠️ Selecione as colunas NR e VOLUME_CLIE antes de importar!');
+                return;
+            }
+
+            if (dadosParsed.length === 0) {
+                alert('⚠️ Nenhum dado válido para importar!');
+                return;
+            }
+
+            const btn = document.getElementById('btnImportar');
+            const status = document.getElementById('status');
+            
+            btn.disabled = true;
+            status.textContent = "⏳ Importando...";
+            status.className = "mt-4 text-center text-sm font-semibold text-slate-400";
+
+            try {
                 const { data: resultado, error } = await window.supabaseClient
                     .from('conferencia')
-                    .insert(data);
+                    .insert(dadosParsed);
 
-                if (error) {
-                    console.error('❌ Erro do Supabase:', error);
-                    throw error;
-                }
+                if (error) throw error;
 
-                console.log('✅ Importado com sucesso:', resultado);
-                
-                status.textContent = `✅ Importação concluída! (${data.length} registros)`;
+                status.textContent = `✅ Importação concluída! ${dadosParsed.length} registros importados.`;
                 status.className = "mt-4 text-center text-green-400 font-semibold";
             } catch (err) {
                 console.error('❌ Erro ao importar:', err);
@@ -167,7 +380,11 @@
             } finally {
                 btn.disabled = false;
             }
-        }
+        });
+
+        console.log('📥 Importador com mapeamento inteligente carregado');
+        console.log('🔀 Sinônimos reconhecidos:', sinonimos);
     </script>
+
 </body>
 </html>
