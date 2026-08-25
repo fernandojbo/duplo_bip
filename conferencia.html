@@ -208,6 +208,49 @@
 
 
         // ==========================================================
+        // FUNÇÃO PARA FALAR (VOZ FEMININA) - SOMENTE QUANDO NR NÃO EXISTE
+        // ==========================================================
+
+        function falar(texto) {
+            try {
+                if (!window.speechSynthesis) {
+                    console.warn('⚠️ Speech Synthesis não suportada neste navegador');
+                    return;
+                }
+
+                // Cancela qualquer fala anterior
+                window.speechSynthesis.cancel();
+
+                const utterance = new SpeechSynthesisUtterance(texto);
+                utterance.lang = 'pt-BR';
+                utterance.rate = 0.9;      // Velocidade ideal para entender
+                utterance.pitch = 1.1;     // Tom feminino (agudo)
+                utterance.volume = 1;      // Volume máximo
+
+                // Tenta encontrar uma voz feminina em português
+                const vozes = window.speechSynthesis.getVoices();
+                const vozFeminina = vozes.find(v => 
+                    v.lang.startsWith('pt') && 
+                    (v.name.toLowerCase().includes('female') || 
+                     v.name.toLowerCase().includes('zira') ||
+                     v.name.toLowerCase().includes('maria') ||
+                     v.name.toLowerCase().includes('daniela') ||
+                     v.name.toLowerCase().includes('samantha'))
+                );
+
+                if (vozFeminina) {
+                    utterance.voice = vozFeminina;
+                }
+
+                window.speechSynthesis.speak(utterance);
+                console.log(`🗣️ Falando: "${texto}"`);
+            } catch (e) {
+                console.warn('⚠️ Erro ao falar:', e);
+            }
+        }
+
+
+        // ==========================================================
         // CONFIGURAÇÃO SUPABASE
         // ==========================================================
 
@@ -274,6 +317,14 @@
                         logout();
                     }
                 });
+            }
+
+            // Carrega vozes para speech synthesis
+            if (window.speechSynthesis) {
+                window.speechSynthesis.getVoices();
+                window.speechSynthesis.onvoiceschanged = () => {
+                    console.log('🗣️ Vozes carregadas:', window.speechSynthesis.getVoices().length);
+                };
             }
 
             // Ativa debug (pressione D para mostrar/ocultar)
@@ -511,6 +562,10 @@
                     let mensagemErro = '';
                     if (!nrExiste) {
                         mensagemErro = `NR ${nrLida} não existe na base`;
+                        
+                        // 🔊 VOZ FEMININA - SOMENTE QUANDO NR NÃO EXISTE
+                        falar("Atenção, esta NR não está na base de dados.");
+                        
                         setFeedbackVisual(false, "❌ NR INVÁLIDA", mensagemErro);
                     } else {
                         mensagemErro = `Volume ${volumeLido} não pertence à NR ${nrLida}`;
