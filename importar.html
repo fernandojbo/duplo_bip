@@ -24,6 +24,21 @@
             background-color: rgba(251, 191, 36, 0.08);
             border-color: rgba(251, 191, 36, 0.2);
         }
+        .erro-item {
+            background-color: rgba(239, 68, 68, 0.1);
+            border-left: 3px solid #ef4444;
+        }
+        .sucesso-item {
+            background-color: rgba(34, 197, 94, 0.1);
+            border-left: 3px solid #22c55e;
+        }
+        .atualizado-item {
+            background-color: rgba(251, 191, 36, 0.1);
+            border-left: 3px solid #fbbf24;
+        }
+        #progresso-bar {
+            transition: width 0.3s ease;
+        }
     </style>
 </head>
 <body class="bg-slate-900 text-white min-h-screen flex items-center justify-center p-4">
@@ -95,12 +110,26 @@
                 <p class="text-[10px] text-slate-500 mt-2">Mostrando as primeiras 5 linhas do arquivo</p>
             </div>
 
+            <!-- Barra de progresso -->
+            <div id="progresso-area" class="hidden mt-4">
+                <div class="flex justify-between text-xs text-slate-400 mb-1">
+                    <span id="progresso-texto">0%</span>
+                    <span id="progresso-contagem">0 / 0</span>
+                </div>
+                <div class="w-full bg-slate-700 rounded-full h-2">
+                    <div id="progresso-bar" class="bg-amber-500 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+            </div>
+
             <button id="btnImportar" class="w-full mt-4 py-3 bg-amber-600 hover:bg-amber-700 font-bold rounded-xl transition-all disabled:opacity-50">
                 🚀 Importar Dados
             </button>
         </div>
 
         <div id="status" class="mt-4 text-center text-sm font-semibold"></div>
+        
+        <!-- Área de detalhes da importação -->
+        <div id="detalhes-importacao" class="hidden mt-4 max-h-60 overflow-y-auto space-y-1"></div>
     </div>
 
     <script>
@@ -208,7 +237,6 @@
 
             colunasArquivo = Object.keys(data[0]);
             
-            // Detecta mapeamento automático
             const map = { nr: null, nf: null, volume_clie: null };
             const detectados = { nr: false, nf: false, volume_clie: false };
 
@@ -220,7 +248,6 @@
                 }
             }
 
-            // Preenche os selects
             const selectNR = document.getElementById('map-nr');
             const selectNF = document.getElementById('map-nf');
             const selectVOL = document.getElementById('map-volume');
@@ -261,7 +288,6 @@
             document.getElementById('status').textContent = `📊 ${data.length} registros encontrados. ${detectadas} colunas detectadas automaticamente. Confirme o mapeamento abaixo.`;
             document.getElementById('status').className = "mt-4 text-center text-sm font-semibold text-emerald-400";
 
-            // Salva mapeamento para reuso
             mapeamentoSalvo = { nr: map.nr, nf: map.nf, volume_clie: map.volume_clie };
         }
 
@@ -340,7 +366,7 @@
 
 
         // ==========================================================
-        // FUNÇÃO PARA IMPORTAR
+        // FUNÇÃO PARA IMPORTAR (EM LOTES - RÁPIDO)
         // ==========================================================
 
         document.getElementById('btnImportar').addEventListener('click', async function() {
@@ -359,31 +385,193 @@
 
             const btn = document.getElementById('btnImportar');
             const status = document.getElementById('status');
+            const detalhesDiv = document.getElementById('detalhes-importacao');
+            const progressoArea = document.getElementById('progresso-area');
+            const progressoBar = document.getElementById('progresso-bar');
+            const progressoTexto = document.getElementById('progresso-texto');
+            const progressoContagem = document.getElementById('progresso-contagem');
             
             btn.disabled = true;
-            status.textContent = "⏳ Importando...";
+            status.textContent = "⏳ Importando em lotes...";
             status.className = "mt-4 text-center text-sm font-semibold text-slate-400";
+            detalhesDiv.innerHTML = '';
+            detalhesDiv.classList.remove('hidden');
+            progressoArea.classList.remove('hidden');
 
-            try {
-                const { data: resultado, error } = await window.supabaseClient
-                    .from('conferencia')
-                    .insert(dadosParsed);
-
-                if (error) throw error;
-
-                status.textContent = `✅ Importação concluída! ${dadosParsed.length} registros importados.`;
-                status.className = "mt-4 text-center text-green-400 font-semibold";
-            } catch (err) {
-                console.error('❌ Erro ao importar:', err);
-                status.textContent = "❌ Erro ao importar: " + err.message;
-                status.className = "mt-4 text-center text-red-400 font-semibold";
-            } finally {
-                btn.disabled = false;
+            const total = dadosParsed.length;
+            const TAMANHO_LOTE = 100; // 100 registros por lote
+            const lotes = [];
+            
+            // Divide em lotes
+            for (let i = 0; i < total; i += TAMANHO_LOTE) {
+                lotes.push(dadosParsed.slice(i, i + TAMANHO_LOTE));
             }
+
+            let inseridos = 0;
+            let atualizados = 0;
+            let erros = [];
+            let processados = 0;
+
+            for (let l = 0; l < lotes.length; l++) {
+                const lote = lotes[l];
+                
+                try {
+                    // Tenta importar o lote inteiro
+                    const { data, error } = await window.supabaseClient
+                        .from('conferencia')
+                        .upsert(lote, { 
+                            onConflict: 'nr',
+                            ignoreDuplicates: false
+                        });
+
+                    processados += lote.length;
+
+                    if (error) {
+                        // Se o lote inteiro falhou, tenta um por um para identificar os erros
+                        console.warn(`⚠️ Lote ${l+1} falhou, processando individualmente...`);
+                        
+                        for (const registro of lote) {
+                            try {
+                                const { data: rData, error: rError } = await window.supabaseClient
+                                    .from('conferencia')
+                                    .upsert(registro, { 
+                                        onConflict: 'nr',
+                                        ignoreDuplicates: false
+                                    });
+
+                                if (rError) {
+                                    if (rError.message && rError.message.includes('volume_clie')) {
+                                        erros.push({
+                                            nr: registro.nr || 'N/A',
+                                            volume: registro.volume_clie || 'N/A',
+                                            motivo: 'VOLUME_CLIE já existe'
+                                        });
+                                    } else if (rError.message && rError.message.includes('nr')) {
+                                        erros.push({
+                                            nr: registro.nr || 'N/A',
+                                            volume: registro.volume_clie || 'N/A',
+                                            motivo: 'NR já existe'
+                                        });
+                                    } else {
+                                        erros.push({
+                                            nr: registro.nr || 'N/A',
+                                            volume: registro.volume_clie || 'N/A',
+                                            motivo: rError.message || 'Erro desconhecido'
+                                        });
+                                    }
+                                } else {
+                                    if (rData && rData.length > 0) {
+                                        if (rData[0].created_at === rData[0].updated_at) {
+                                            inseridos++;
+                                        } else {
+                                            atualizados++;
+                                        }
+                                    } else {
+                                        inseridos++;
+                                    }
+                                }
+                            } catch (err) {
+                                erros.push({
+                                    nr: registro.nr || 'N/A',
+                                    volume: registro.volume_clie || 'N/A',
+                                    motivo: err.message || 'Erro inesperado'
+                                });
+                            }
+                        }
+                    } else {
+                        // Lote inteiro deu certo
+                        if (data) {
+                            data.forEach(item => {
+                                if (item.created_at === item.updated_at) {
+                                    inseridos++;
+                                } else {
+                                    atualizados++;
+                                }
+                            });
+                        }
+                    }
+                } catch (err) {
+                    // Erro no lote, processa individualmente
+                    console.warn(`⚠️ Erro no lote ${l+1}, processando individualmente...`);
+                    for (const registro of lote) {
+                        try {
+                            const { data: rData, error: rError } = await supabaseClient
+                                .from('conferencia')
+                                .upsert(registro, { onConflict: 'nr', ignoreDuplicates: false });
+
+                            if (rError) {
+                                erros.push({
+                                    nr: registro.nr || 'N/A',
+                                    volume: registro.volume_clie || 'N/A',
+                                    motivo: rError.message || 'Erro'
+                                });
+                            } else {
+                                inseridos++;
+                            }
+                        } catch (e) {
+                            erros.push({
+                                nr: registro.nr || 'N/A',
+                                volume: registro.volume_clie || 'N/A',
+                                motivo: e.message || 'Erro'
+                            });
+                        }
+                    }
+                }
+
+                // Atualiza barra de progresso
+                const progresso = Math.round((processados / total) * 100);
+                progressoBar.style.width = progresso + '%';
+                progressoTexto.textContent = progresso + '%';
+                progressoContagem.textContent = `${processados} / ${total}`;
+            }
+
+            // ==========================================================
+            // RELATÓRIO FINAL
+            // ==========================================================
+
+            let msg = `✅ Importação concluída! ${processados} registros processados.`;
+            if (inseridos > 0) msg += `\n📥 ${inseridos} novos inseridos.`;
+            if (atualizados > 0) msg += `\n🔄 ${atualizados} atualizados.`;
+            if (erros.length > 0) msg += `\n❌ ${erros.length} falhas.`;
+            
+            status.textContent = msg;
+            status.className = "mt-4 text-center text-sm font-semibold " + 
+                (erros.length > 0 ? "text-yellow-400" : "text-green-400");
+
+            // ==========================================================
+            // DETALHES DOS ERROS
+            // ==========================================================
+
+            if (erros.length > 0) {
+                detalhesDiv.innerHTML = `
+                    <div class="bg-red-900/20 border border-red-500/30 rounded-lg p-3 mb-2">
+                        <p class="text-red-400 font-semibold text-sm">❌ ${erros.length} registros NÃO foram importados:</p>
+                    </div>
+                    ${erros.slice(0, 50).map(e => `
+                        <div class="erro-item px-3 py-2 rounded-lg text-xs flex justify-between items-center">
+                            <div>
+                                <span class="font-mono text-slate-300">NR: ${e.nr}</span>
+                                <span class="font-mono text-slate-400 ml-3">VOL: ${e.volume}</span>
+                            </div>
+                            <span class="text-red-400 font-semibold">${e.motivo}</span>
+                        </div>
+                    `).join('')}
+                    ${erros.length > 50 ? `<div class="text-xs text-slate-500 text-center py-2">... e mais ${erros.length - 50} erros</div>` : ''}
+                `;
+            } else {
+                detalhesDiv.innerHTML = `
+                    <div class="bg-green-900/20 border border-green-500/30 rounded-lg p-3">
+                        <p class="text-green-400 font-semibold text-sm">✅ Todos os ${processados} registros foram importados com sucesso!</p>
+                    </div>
+                `;
+            }
+
+            btn.disabled = false;
         });
 
-        console.log('📥 Importador com mapeamento inteligente carregado');
+        console.log('📥 Importador com processamento em lotes carregado');
         console.log('🔀 Sinônimos reconhecidos:', sinonimos);
+        console.log('⚡ Processamento em lotes de 100 registros');
     </script>
 
 </body>
