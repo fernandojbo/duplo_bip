@@ -1,0 +1,22 @@
+{
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "redirects": [
+    {
+      "source": "/sistema",
+      "destination": "/sistema/index.html",
+      "permanent": false
+    },
+    {
+      "source": "/apresentacao",
+      "destination": "/apresentacao.html",
+      "permanent": false
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/sistema/:path*",
+      "destination": "/sistema/:path*"
+    }
+  ]
+}
